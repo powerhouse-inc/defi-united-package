@@ -9,6 +9,7 @@ import { externalDependencyUpgradeManifest } from "document-models/external-depe
 import { onchainReceiptUpgradeManifest } from "document-models/onchain-receipt/upgrades";
 import { pledgeUpgradeManifest } from "document-models/pledge/upgrades";
 import { reliefCampaignUpgradeManifest } from "document-models/relief-campaign/upgrades";
+import { statusUpdateUpgradeManifest } from "document-models/status-update/upgrades";
 
 export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
   contributorProfileUpgradeManifest,
@@ -17,4 +18,5 @@ export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
   onchainReceiptUpgradeManifest,
   pledgeUpgradeManifest,
   reliefCampaignUpgradeManifest,
+  statusUpdateUpgradeManifest,
 ];

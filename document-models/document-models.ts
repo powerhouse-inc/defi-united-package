@@ -9,6 +9,7 @@ import { ExternalDependency as ExternalDependencyV1 } from "document-models/exte
 import { OnchainReceipt as OnchainReceiptV1 } from "document-models/onchain-receipt/v1";
 import { Pledge as PledgeV1 } from "document-models/pledge/v1";
 import { ReliefCampaign as ReliefCampaignV1 } from "document-models/relief-campaign/v1";
+import { StatusUpdate as StatusUpdateV1 } from "document-models/status-update/v1";
 
 export const documentModels: DocumentModelModule<any>[] = [
   ContributorProfileV1,
@@ -17,4 +18,5 @@ export const documentModels: DocumentModelModule<any>[] = [
   OnchainReceiptV1,
   PledgeV1,
   ReliefCampaignV1,
+  StatusUpdateV1,
 ];

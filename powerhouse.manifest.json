@@ -28,8 +28,12 @@
 			"name": "OnchainReceipt"
 		},
 		{
-			"name": "DistributionPlan",
-			"id": "defi-united/distribution-plan"
+			"id": "defi-united/distribution-plan",
+			"name": "DistributionPlan"
+		},
+		{
+			"name": "StatusUpdate",
+			"id": "defi-united/status-update"
 		}
 	],
 	"apps": [],

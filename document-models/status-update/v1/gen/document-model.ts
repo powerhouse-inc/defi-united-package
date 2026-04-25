@@ -1,0 +1,143 @@
+import type { DocumentModelGlobalState } from "document-model";
+
+export const documentModel: DocumentModelGlobalState = {
+  id: "defi-united/status-update",
+  name: "StatusUpdate",
+  author: {
+    name: "Powerhouse",
+    website: "https://powerhouse.inc",
+  },
+  extension: ".sup",
+  description:
+    "Public or operator-only status update on a relief campaign with optional metrics snapshot.",
+  specifications: [
+    {
+      state: {
+        local: {
+          schema: "",
+          examples: [],
+          initialValue: "",
+        },
+        global: {
+          schema:
+            "type StatusUpdateState {\n    publishedAt: DateTime\n    visibility: UpdateVisibility!\n    authorProfileId: PHID\n    title: String!\n    body: String!\n    metricsSnapshot: MetricsSnapshot\n    externalAnnouncements: [ExternalAnnouncement!]!\n}\n\nenum UpdateVisibility {\n    PUBLIC\n    CONTRIBUTORS_ONLY\n    INTERNAL\n}\n\nenum AnnouncementPlatform {\n    TWITTER\n    FARCASTER\n    MIRROR\n    BLOG\n}\n\ntype MetricsSnapshot {\n    totalPledged: Amount_Tokens\n    totalReceived: Amount_Tokens\n    dependenciesResolved: Int\n}\n\ntype ExternalAnnouncement {\n    id: OID!\n    platform: AnnouncementPlatform!\n    url: URL!\n}",
+          examples: [],
+          initialValue:
+            '{\n  "publishedAt": null,\n  "visibility": "INTERNAL",\n  "authorProfileId": null,\n  "title": "",\n  "body": "",\n  "metricsSnapshot": null,\n  "externalAnnouncements": []\n}',
+        },
+      },
+      modules: [
+        {
+          id: "su-pub",
+          name: "publishing",
+          description: "Draft, publish, and announce status updates",
+          operations: [
+            {
+              id: "op-su-draft",
+              name: "DRAFT_UPDATE",
+              description: "Create or amend a draft update",
+              schema:
+                "input DraftUpdateInput {\n    title: String\n    body: String\n    visibility: UpdateVisibility\n    authorProfileId: PHID\n}",
+              template: "Create or amend a draft update",
+              reducer:
+                "if (action.input.title) state.title = action.input.title;\nif (action.input.body) state.body = action.input.body;\nif (action.input.visibility) state.visibility = action.input.visibility;\nif (action.input.authorProfileId) state.authorProfileId = action.input.authorProfileId;",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-su-edit",
+              name: "EDIT_UPDATE",
+              description: "Edit title and/or body of an update",
+              schema:
+                "input EditUpdateInput {\n    title: String\n    body: String\n}",
+              template: "Edit title and/or body of an update",
+              reducer:
+                "if (action.input.title) state.title = action.input.title;\nif (action.input.body) state.body = action.input.body;",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-su-publish",
+              name: "PUBLISH_UPDATE",
+              description: "Publish an update with a metrics snapshot",
+              schema:
+                "input MetricsSnapshotInput {\n    totalPledged: Amount_Tokens\n    totalReceived: Amount_Tokens\n    dependenciesResolved: Int\n}\n\ninput PublishUpdateInput {\n    publishedAt: DateTime!\n    metricsSnapshot: MetricsSnapshotInput\n}",
+              template: "Publish an update with a metrics snapshot",
+              reducer:
+                "if (state.publishedAt) throw new UpdateAlreadyPublishedError('Update has already been published');\nif (!state.title || !state.body) throw new MissingTitleOrBodyError('Title and body are required to publish');\nstate.publishedAt = action.input.publishedAt;\nif (action.input.metricsSnapshot) {\n  state.metricsSnapshot = {\n    totalPledged: action.input.metricsSnapshot.totalPledged ?? null,\n    totalReceived: action.input.metricsSnapshot.totalReceived ?? null,\n    dependenciesResolved: action.input.metricsSnapshot.dependenciesResolved ?? null,\n  };\n}",
+              errors: [
+                {
+                  id: "err-su-already-pub",
+                  name: "UpdateAlreadyPublishedError",
+                  code: "UPDATE_ALREADY_PUBLISHED",
+                  description: "PUBLISH_UPDATE has already been called",
+                  template: "",
+                },
+                {
+                  id: "err-su-missing",
+                  name: "MissingTitleOrBodyError",
+                  code: "MISSING_TITLE_OR_BODY",
+                  description: "Title and body must be set before publishing",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-su-attach",
+              name: "ATTACH_ANNOUNCEMENT",
+              description:
+                "Attach an external announcement (Twitter, Farcaster, blog post, etc.)",
+              schema:
+                "input AttachAnnouncementInput {\n    id: OID!\n    platform: AnnouncementPlatform!\n    url: URL!\n}",
+              template:
+                "Attach an external announcement (Twitter, Farcaster, blog post, etc.)",
+              reducer:
+                "state.externalAnnouncements.push({\n  id: action.input.id,\n  platform: action.input.platform,\n  url: action.input.url,\n});",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-su-retract",
+              name: "RETRACT_UPDATE",
+              description: "Retract a published update",
+              schema: "input RetractUpdateInput {\n    _: Boolean\n}",
+              template: "Retract a published update",
+              reducer:
+                "if (!state.publishedAt) throw new UpdateNotPublishedError('Update is not published');\nstate.publishedAt = null;",
+              errors: [
+                {
+                  id: "err-su-not-pub",
+                  name: "UpdateNotPublishedError",
+                  code: "UPDATE_NOT_PUBLISHED",
+                  description: "Update is not currently published",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-su-vis",
+              name: "SET_VISIBILITY",
+              description: "Set update visibility",
+              schema:
+                "input SetVisibilityInput {\n    visibility: UpdateVisibility!\n}",
+              template: "Set update visibility",
+              reducer: "state.visibility = action.input.visibility;",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+          ],
+        },
+      ],
+      version: 1,
+      changeLog: [],
+    },
+  ],
+};
