@@ -56,7 +56,7 @@ describe("StatusUpdate publishing reducer", () => {
     const doc = utils.createDocument();
     const next = reducer(doc, publishUpdate({ publishedAt: PUB_AT }));
     expect(next.operations.global[0].error).toBe(
-      "Title and body must be set before publishing",
+      "Title and body are required to publish",
     );
   });
 
@@ -108,7 +108,7 @@ describe("StatusUpdate publishing reducer", () => {
     const doc = utils.createDocument();
     const next = reducer(doc, retractUpdate({ _: null }));
     expect(next.operations.global[0].error).toBe(
-      "Update is not currently published",
+      "Update is not published",
     );
   });
 
