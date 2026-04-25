@@ -25,14 +25,14 @@ export const onchainReceiptReconciliationOperations: OnchainReceiptReconciliatio
       state.matchedPledgeId = action.input.pledgeId;
       state.reconciliationStatus = "MATCHED";
     },
-    markAmbiguousOperation(state, action) {
+    markAmbiguousOperation(state, _action) {
       state.reconciliationStatus = "AMBIGUOUS";
     },
     overrideMatchOperation(state, action) {
       state.matchedPledgeId = action.input.pledgeId;
       state.reconciliationStatus = "MANUALLY_OVERRIDDEN";
     },
-    clearMatchOperation(state, action) {
+    clearMatchOperation(state, _action) {
       state.matchedPledgeId = null;
       state.reconciliationStatus = "UNMATCHED";
     },

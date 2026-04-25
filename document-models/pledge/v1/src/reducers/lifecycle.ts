@@ -29,7 +29,7 @@ export const pledgeLifecycleOperations: PledgeLifecycleOperations = {
       quorumStatus: action.input.quorumStatus ?? null,
     };
   },
-  markGovernancePendingOperation(state, action) {
+  markGovernancePendingOperation(state, _action) {
     if (state.status !== "PROPOSED")
       throw new InvalidStatusTransitionError(
         `Cannot mark governance pending in status ${state.status}`,
@@ -40,7 +40,7 @@ export const pledgeLifecycleOperations: PledgeLifecycleOperations = {
       );
     state.status = "GOVERNANCE_PENDING";
   },
-  markConfirmedOperation(state, action) {
+  markConfirmedOperation(state, _action) {
     if (state.status !== "PROPOSED" && state.status !== "GOVERNANCE_PENDING")
       throw new InvalidStatusTransitionError(
         `Cannot confirm pledge in status ${state.status}`,

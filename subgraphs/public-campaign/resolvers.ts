@@ -29,7 +29,7 @@ async function loadDriveBundle(
   campaign: ReliefCampaignDocument,
 ): Promise<DriveBundle | null> {
   const parents = await reactorClient.getParents(campaign.header.id);
-  const drive = parents.results[0];
+  const drive = parents.results.at(0);
   if (!drive) return null;
   const driveId = drive.header.id;
 

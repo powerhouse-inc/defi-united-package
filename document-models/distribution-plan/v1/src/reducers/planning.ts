@@ -59,7 +59,7 @@ export const distributionPlanPlanningOperations: DistributionPlanPlanningOperati
         throw new RecipientNotFoundError("No recipient with that id");
       state.recipients.splice(idx, 1);
     },
-    approvePlanOperation(state, action) {
+    approvePlanOperation(state, _action) {
       if (state.status !== "DRAFT")
         throw new InvalidStatusTransitionError(
           `Cannot approve plan in status ${state.status}`,
@@ -89,7 +89,7 @@ export const distributionPlanPlanningOperations: DistributionPlanPlanningOperati
       if (!r) throw new RecipientNotFoundError("No recipient with that id");
       r.status = "REFUNDED";
     },
-    completeDistributionOperation(state, action) {
+    completeDistributionOperation(state, _action) {
       if (state.status !== "EXECUTING")
         throw new InvalidStatusTransitionError(
           `Cannot complete plan in status ${state.status}`,
@@ -103,7 +103,7 @@ export const distributionPlanPlanningOperations: DistributionPlanPlanningOperati
         );
       state.status = "COMPLETED";
     },
-    cancelPlanOperation(state, action) {
+    cancelPlanOperation(state, _action) {
       if (state.status === "COMPLETED" || state.status === "CANCELLED")
         throw new InvalidStatusTransitionError(
           `Cannot cancel plan in status ${state.status}`,

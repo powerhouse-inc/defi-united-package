@@ -107,9 +107,7 @@ describe("StatusUpdate publishing reducer", () => {
   it("RETRACT_UPDATE rejects when not published", () => {
     const doc = utils.createDocument();
     const next = reducer(doc, retractUpdate({ _: null }));
-    expect(next.operations.global[0].error).toBe(
-      "Update is not published",
-    );
+    expect(next.operations.global[0].error).toBe("Update is not published");
   });
 
   it("ATTACH_ANNOUNCEMENT appends external links", () => {

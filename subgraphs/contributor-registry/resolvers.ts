@@ -88,14 +88,14 @@ async function loadAll(reactorClient: BaseSubgraph["reactorClient"]): Promise<{
   const campaignsByDriveId = new Map<string, ReliefCampaignDocument>();
   for (const c of campaigns) {
     const parents = await reactorClient.getParents(c.header.id);
-    const drive = parents.results[0];
+    const drive = parents.results.at(0);
     if (drive) campaignsByDriveId.set(drive.header.id, c);
   }
 
   const driveIdByPledgeId = new Map<string, string>();
   for (const p of pledges) {
     const parents = await reactorClient.getParents(p.header.id);
-    const drive = parents.results[0];
+    const drive = parents.results.at(0);
     if (drive) driveIdByPledgeId.set(p.header.id, drive.header.id);
   }
 

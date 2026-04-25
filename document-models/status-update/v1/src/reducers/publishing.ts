@@ -44,7 +44,7 @@ export const statusUpdatePublishingOperations: StatusUpdatePublishingOperations 
         url: action.input.url,
       });
     },
-    retractUpdateOperation(state, action) {
+    retractUpdateOperation(state, _action) {
       if (!state.publishedAt)
         throw new UpdateNotPublishedError("Update is not published");
       state.publishedAt = null;

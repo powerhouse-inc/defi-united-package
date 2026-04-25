@@ -39,7 +39,7 @@ export const externalDependencyTrackingOperations: ExternalDependencyTrackingOpe
         );
       state.blocks.splice(idx, 1);
     },
-    resolveOperation(state, action) {
+    resolveOperation(state, _action) {
       if (state.status === "RESOLVED")
         throw new DependencyAlreadyResolvedError(
           "Dependency is already resolved",
@@ -50,7 +50,7 @@ export const externalDependencyTrackingOperations: ExternalDependencyTrackingOpe
         );
       state.status = "RESOLVED";
     },
-    abandonOperation(state, action) {
+    abandonOperation(state, _action) {
       if (state.status === "RESOLVED")
         throw new InvalidStatusTransitionError(
           "Cannot abandon a resolved dependency",
