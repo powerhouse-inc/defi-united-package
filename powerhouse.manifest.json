@@ -20,8 +20,12 @@
 			"name": "Pledge"
 		},
 		{
-			"name": "ExternalDependency",
-			"id": "defi-united/external-dependency"
+			"id": "defi-united/external-dependency",
+			"name": "ExternalDependency"
+		},
+		{
+			"name": "OnchainReceipt",
+			"id": "defi-united/onchain-receipt"
 		}
 	],
 	"apps": [],
