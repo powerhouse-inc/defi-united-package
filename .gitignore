@@ -1,0 +1,11 @@
+
+dist
+coverage
+node_modules
+.eslintcache
+.env.local
+
+.ph
+projects-import.js
+
+.claude/settings.local.json
