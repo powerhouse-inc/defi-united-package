@@ -1,0 +1,157 @@
+import type { DocumentModelGlobalState } from "document-model";
+
+export const documentModel: DocumentModelGlobalState = {
+  id: "defi-united/contributor-profile",
+  name: "ContributorProfile",
+  author: {
+    name: "Powerhouse",
+    website: "https://powerhouse.inc",
+  },
+  extension: ".cprf",
+  description:
+    "Cross-campaign profile for an organization or individual that contributes to relief efforts.",
+  specifications: [
+    {
+      state: {
+        local: {
+          schema: "",
+          examples: [],
+          initialValue: "",
+        },
+        global: {
+          schema:
+            "type ContributorProfileState {\n    legalName: String\n    displayName: String!\n    kind: ContributorKind!\n    websiteUrl: URL\n    twitterHandle: String\n    farcasterHandle: String\n    walletAddresses: [ContributorWallet!]!\n    governanceEndpoints: [GovernanceEndpoint!]!\n    trustLevel: TrustLevel!\n}\n\nenum ContributorKind {\n    DAO\n    FOUNDATION\n    COMPANY\n    INDIVIDUAL\n}\n\nenum TrustLevel {\n    VERIFIED\n    ANNOUNCED\n    ANONYMOUS\n}\n\nenum GovernancePlatform {\n    SNAPSHOT\n    TALLY\n    FORUM\n    AGORA\n    OTHER\n}\n\ntype ContributorWallet {\n    id: OID!\n    chainId: Int!\n    address: EthereumAddress!\n    label: String\n}\n\ntype GovernanceEndpoint {\n    id: OID!\n    platform: GovernancePlatform!\n    url: URL!\n}",
+          examples: [],
+          initialValue:
+            '{\n  "legalName": null,\n  "displayName": "",\n  "kind": "DAO",\n  "websiteUrl": null,\n  "twitterHandle": null,\n  "farcasterHandle": null,\n  "walletAddresses": [],\n  "governanceEndpoints": [],\n  "trustLevel": "ANNOUNCED"\n}',
+        },
+      },
+      modules: [
+        {
+          id: "cp-profile",
+          name: "profile",
+          description:
+            "Profile metadata, wallet registry, and governance endpoints",
+          operations: [
+            {
+              id: "op-cp-set-details",
+              name: "SET_PROFILE_DETAILS",
+              description: "Update contributor profile metadata",
+              schema:
+                "input SetProfileDetailsInput {\n    legalName: String\n    displayName: String\n    kind: ContributorKind\n    websiteUrl: URL\n    twitterHandle: String\n    farcasterHandle: String\n}",
+              template: "Update contributor profile metadata",
+              reducer:
+                "if (action.input.legalName) state.legalName = action.input.legalName;\nif (action.input.displayName) state.displayName = action.input.displayName;\nif (action.input.kind) state.kind = action.input.kind;\nif (action.input.websiteUrl) state.websiteUrl = action.input.websiteUrl;\nif (action.input.twitterHandle) state.twitterHandle = action.input.twitterHandle;\nif (action.input.farcasterHandle) state.farcasterHandle = action.input.farcasterHandle;",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-cp-add-wallet",
+              name: "ADD_WALLET",
+              description: "Register an on-chain wallet for this contributor",
+              schema:
+                "input AddWalletInput {\n    id: OID!\n    chainId: Int!\n    address: EthereumAddress!\n    label: String\n}",
+              template: "Register an on-chain wallet for this contributor",
+              reducer:
+                "const dup = state.walletAddresses.find(\n  (w) => w.address.toLowerCase() === action.input.address.toLowerCase() && w.chainId === action.input.chainId,\n);\nif (dup) throw new DuplicateWalletError('Wallet already registered for this chain');\nstate.walletAddresses.push({\n  id: action.input.id,\n  chainId: action.input.chainId,\n  address: action.input.address,\n  label: action.input.label || null,\n});",
+              errors: [
+                {
+                  id: "err-cp-dup-wallet",
+                  name: "DuplicateWalletError",
+                  code: "DUPLICATE_WALLET",
+                  description:
+                    "A wallet with the same address and chain id is already registered",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-cp-rem-wallet",
+              name: "REMOVE_WALLET",
+              description: "Remove a registered wallet",
+              schema: "input RemoveWalletInput {\n    id: OID!\n}",
+              template: "Remove a registered wallet",
+              reducer:
+                "const idx = state.walletAddresses.findIndex((w) => w.id === action.input.id);\nif (idx === -1) throw new WalletNotFoundError('No wallet with that id');\nstate.walletAddresses.splice(idx, 1);",
+              errors: [
+                {
+                  id: "err-cp-wallet-not-found",
+                  name: "WalletNotFoundError",
+                  code: "WALLET_NOT_FOUND",
+                  description: "No wallet with the supplied id is registered",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-cp-add-gov",
+              name: "ADD_GOVERNANCE_ENDPOINT",
+              description:
+                "Register a governance endpoint URL for this contributor",
+              schema:
+                "input AddGovernanceEndpointInput {\n    id: OID!\n    platform: GovernancePlatform!\n    url: URL!\n}",
+              template:
+                "Register a governance endpoint URL for this contributor",
+              reducer:
+                "const dup = state.governanceEndpoints.find(\n  (e) => e.platform === action.input.platform && e.url === action.input.url,\n);\nif (dup) throw new DuplicateGovernanceEndpointError('Governance endpoint already registered');\nstate.governanceEndpoints.push({\n  id: action.input.id,\n  platform: action.input.platform,\n  url: action.input.url,\n});",
+              errors: [
+                {
+                  id: "err-cp-dup-gov",
+                  name: "DuplicateGovernanceEndpointError",
+                  code: "DUPLICATE_GOVERNANCE_ENDPOINT",
+                  description:
+                    "A governance endpoint with the same platform and URL is already registered",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-cp-rem-gov",
+              name: "REMOVE_GOVERNANCE_ENDPOINT",
+              description: "Remove a governance endpoint",
+              schema: "input RemoveGovernanceEndpointInput {\n    id: OID!\n}",
+              template: "Remove a governance endpoint",
+              reducer:
+                "const idx = state.governanceEndpoints.findIndex((e) => e.id === action.input.id);\nif (idx === -1) throw new GovernanceEndpointNotFoundError('No governance endpoint with that id');\nstate.governanceEndpoints.splice(idx, 1);",
+              errors: [
+                {
+                  id: "err-cp-gov-not-found",
+                  name: "GovernanceEndpointNotFoundError",
+                  code: "GOVERNANCE_ENDPOINT_NOT_FOUND",
+                  description:
+                    "No governance endpoint with the supplied id is registered",
+                  template: "",
+                },
+              ],
+              examples: [],
+              scope: "global",
+            },
+            {
+              id: "op-cp-set-trust",
+              name: "SET_TRUST_LEVEL",
+              description:
+                "Set the trust level (VERIFIED / ANNOUNCED / ANONYMOUS)",
+              schema:
+                "input SetTrustLevelInput {\n    trustLevel: TrustLevel!\n}",
+              template:
+                "Set the trust level (VERIFIED / ANNOUNCED / ANONYMOUS)",
+              reducer: "state.trustLevel = action.input.trustLevel;",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
+          ],
+        },
+      ],
+      version: 1,
+      changeLog: [],
+    },
+  ],
+};
