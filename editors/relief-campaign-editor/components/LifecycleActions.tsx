@@ -1,12 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { CampaignStatus } from "../../../document-models/relief-campaign/v1/gen/schema/types.js";
-import {
-  CAN_ARCHIVE,
-  CAN_FAIL,
-  CAN_RESOLVE,
-  CAN_START,
-} from "./constants.js";
+import { CAN_ARCHIVE, CAN_FAIL, CAN_RESOLVE, CAN_START } from "./constants.js";
 
 interface Props {
   status: CampaignStatus;
@@ -74,9 +69,7 @@ export function LifecycleActions({
           enabled={canArchive}
           tone="neutral"
           onClick={onArchive}
-          tooltip={
-            canArchive ? undefined : "Only after RESOLVED / FAILED"
-          }
+          tooltip={canArchive ? undefined : "Only after RESOLVED / FAILED"}
         >
           Archive
         </LifecycleButton>
@@ -141,7 +134,6 @@ function LifecycleButton({
   tooltip?: string;
   children: ReactNode;
 }) {
-
   return (
     <button
       type="button"

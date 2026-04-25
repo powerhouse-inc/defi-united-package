@@ -85,7 +85,7 @@ export default function Editor() {
   );
 
   if (!document) return null;
-  const state = document.state.global as ContributorProfileState;
+  const state = document.state.global;
 
   return (
     <div className="contributor-profile-editor">

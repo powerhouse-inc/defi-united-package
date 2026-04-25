@@ -97,16 +97,14 @@ export default function Editor() {
   );
 
   const editNotes = useCallback(
-    (input: {
-      publicNotes: string | null;
-      internalNotes: string | null;
-    }) => dispatch(actions.editNotes(input)),
+    (input: { publicNotes: string | null; internalNotes: string | null }) =>
+      dispatch(actions.editNotes(input)),
     [dispatch],
   );
 
   if (!document) return null;
 
-  const state = document.state.global as PledgeState;
+  const state = document.state.global;
 
   return (
     <div className="pledge-scope">

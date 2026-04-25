@@ -84,7 +84,10 @@ export function ProfileDetailsForm({
         ) : null}
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
+      >
         <Field label="Display name" htmlFor="cp-displayName">
           <input
             id="cp-displayName"

@@ -228,9 +228,7 @@ function RecipientRow(props: RecipientRowProps) {
             className="w-full rounded-md border border-neutral-200 px-2 py-1 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
         ) : (
-          <span className="text-neutral-700">
-            {recipient.rationale ?? "—"}
-          </span>
+          <span className="text-neutral-700">{recipient.rationale ?? "—"}</span>
         )}
       </td>
       <td className="px-2 py-2">

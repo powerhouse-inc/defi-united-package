@@ -41,9 +41,7 @@ export function PlanHeader({ state }: { state: DistributionPlanState }) {
             <span className="text-2xl font-bold text-neutral-900 tabular-nums">
               {formatTokens(state.totalAvailable)}
             </span>
-            <span className="text-sm font-medium text-neutral-500">
-              tokens
-            </span>
+            <span className="text-sm font-medium text-neutral-500">tokens</span>
           </div>
         </div>
         <div>

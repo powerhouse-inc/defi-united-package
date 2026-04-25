@@ -31,8 +31,7 @@ export function ApprovalRefsTable({
           Approval references
         </h2>
         <span className="text-xs text-neutral-500">
-          {approvalRefs.length}{" "}
-          {approvalRefs.length === 1 ? "link" : "links"}
+          {approvalRefs.length} {approvalRefs.length === 1 ? "link" : "links"}
         </span>
       </div>
 

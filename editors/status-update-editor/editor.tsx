@@ -62,9 +62,7 @@ export default function Editor() {
 
   const attachAnnouncement = useCallback(
     (platform: AnnouncementPlatform, url: string) => {
-      dispatch(
-        actions.attachAnnouncement({ id: generateId(), platform, url }),
-      );
+      dispatch(actions.attachAnnouncement({ id: generateId(), platform, url }));
     },
     [dispatch],
   );

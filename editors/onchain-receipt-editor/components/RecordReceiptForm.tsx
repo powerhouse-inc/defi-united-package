@@ -58,12 +58,10 @@ export function RecordReceiptForm({ onSubmit }: Props) {
       return setError("Chain ID must be a positive integer");
     if (!Number.isFinite(blockNumber) || blockNumber < 0)
       return setError("Block number must be a non-negative integer");
-    if (!form.blockTimestamp)
-      return setError("Block timestamp is required");
+    if (!form.blockTimestamp) return setError("Block timestamp is required");
     if (!form.fromAddress.trim()) return setError("From address is required");
     if (!form.toAddress.trim()) return setError("To address is required");
-    if (!form.assetSymbol.trim())
-      return setError("Asset symbol is required");
+    if (!form.assetSymbol.trim()) return setError("Asset symbol is required");
     if (!Number.isFinite(amount)) return setError("Amount must be a number");
 
     const timestampISO = new Date(form.blockTimestamp).toISOString();

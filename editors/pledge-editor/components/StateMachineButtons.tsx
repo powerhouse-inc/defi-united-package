@@ -5,10 +5,7 @@ import { allowedActions } from "./constants.js";
 export interface StateMachineHandlers {
   markGovernancePending: () => void;
   markConfirmed: () => void;
-  markReceived: (params: {
-    receiptId: string;
-    amount: number;
-  }) => void;
+  markReceived: (params: { receiptId: string; amount: number }) => void;
   cancelPledge: (reason: string) => void;
   failPledge: (reason: string) => void;
 }

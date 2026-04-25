@@ -118,8 +118,7 @@ export default function Editor() {
     [dispatch],
   );
   const removeOperatorWallet = useCallback(
-    (address: string) =>
-      dispatch(actions.removeOperatorWallet({ address })),
+    (address: string) => dispatch(actions.removeOperatorWallet({ address })),
     [dispatch],
   );
 
@@ -190,10 +189,7 @@ export default function Editor() {
           onRemove={removeContribution}
         />
 
-        <ExternalLinks
-          links={state.externalLinks}
-          onAdd={addExternalLink}
-        />
+        <ExternalLinks links={state.externalLinks} onAdd={addExternalLink} />
 
         <OperatorWallets
           wallets={state.operatorWallets}

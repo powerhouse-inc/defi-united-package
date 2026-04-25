@@ -48,7 +48,8 @@ export function WalletsTable({
             Wallet addresses
           </h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Used by reconciliation to attribute on-chain receipts to this contributor.
+            Used by reconciliation to attribute on-chain receipts to this
+            contributor.
           </p>
         </div>
         <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">

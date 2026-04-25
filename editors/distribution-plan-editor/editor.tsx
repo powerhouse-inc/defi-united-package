@@ -124,7 +124,7 @@ export default function Editor() {
   }, [dispatch]);
 
   if (!document) return null;
-  const state = document.state.global as DistributionPlanState;
+  const state = document.state.global;
   const planEditable = state.status === "DRAFT";
 
   return (

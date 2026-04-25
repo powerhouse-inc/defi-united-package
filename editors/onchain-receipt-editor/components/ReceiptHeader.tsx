@@ -30,9 +30,7 @@ export function ReceiptHeader({ state }: { state: OnchainReceiptState }) {
         <span className="text-3xl font-bold text-neutral-900">
           {formatTokens(state.amount)}
         </span>
-        <span className="text-base font-medium text-neutral-500">
-          {symbol}
-        </span>
+        <span className="text-base font-medium text-neutral-500">{symbol}</span>
       </div>
     </header>
   );

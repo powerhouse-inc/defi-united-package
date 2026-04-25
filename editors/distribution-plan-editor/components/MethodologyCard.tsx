@@ -5,7 +5,10 @@ import type { DistributionPlanState } from "../../../document-models/distributio
 interface MethodologyCardProps {
   state: DistributionPlanState;
   disabled: boolean;
-  onSave: (input: { methodology: string; totalAvailable: number | null }) => void;
+  onSave: (input: {
+    methodology: string;
+    totalAvailable: number | null;
+  }) => void;
 }
 
 export function MethodologyCard({

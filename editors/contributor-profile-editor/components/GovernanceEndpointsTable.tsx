@@ -109,7 +109,10 @@ export function GovernanceEndpointsTable({
         <select
           value={draft.platform}
           onChange={(e) =>
-            setDraft({ ...draft, platform: e.target.value as GovernancePlatform })
+            setDraft({
+              ...draft,
+              platform: e.target.value as GovernancePlatform,
+            })
           }
           className="cp-input"
           aria-label="Platform"

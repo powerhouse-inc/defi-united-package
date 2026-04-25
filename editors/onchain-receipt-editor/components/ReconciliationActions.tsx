@@ -21,14 +21,10 @@ function ActionButton({
   children: React.ReactNode;
 }) {
   const styles: Record<string, string> = {
-    default:
-      "bg-white text-neutral-800 border-neutral-300 hover:bg-neutral-50",
-    primary:
-      "bg-sky-600 text-white border-sky-600 hover:bg-sky-700",
-    danger:
-      "bg-white text-rose-700 border-rose-200 hover:bg-rose-50",
-    warning:
-      "bg-white text-amber-800 border-amber-200 hover:bg-amber-50",
+    default: "bg-white text-neutral-800 border-neutral-300 hover:bg-neutral-50",
+    primary: "bg-sky-600 text-white border-sky-600 hover:bg-sky-700",
+    danger: "bg-white text-rose-700 border-rose-200 hover:bg-rose-50",
+    warning: "bg-white text-amber-800 border-amber-200 hover:bg-amber-50",
   };
   return (
     <button
@@ -42,11 +38,7 @@ function ActionButton({
   );
 }
 
-export function ReconciliationActions({
-  handlers,
-}: {
-  handlers: Handlers;
-}) {
+export function ReconciliationActions({ handlers }: { handlers: Handlers }) {
   const [openForm, setOpenForm] = useState<InlineForm>(null);
   const [pledgeId, setPledgeId] = useState("");
 
@@ -84,10 +76,7 @@ export function ReconciliationActions({
         >
           Attach pledge
         </ActionButton>
-        <ActionButton
-          variant="warning"
-          onClick={handlers.onMarkAmbiguous}
-        >
+        <ActionButton variant="warning" onClick={handlers.onMarkAmbiguous}>
           Mark ambiguous
         </ActionButton>
         <ActionButton

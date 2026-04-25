@@ -41,7 +41,7 @@ export default function Editor() {
   );
 
   if (!document) return null;
-  const state = document.state.global as OnchainReceiptState;
+  const state = document.state.global;
   const isUninitialized = !state.txHash;
 
   return (

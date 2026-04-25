@@ -15,7 +15,6 @@ function useDebouncedField(
     if (value === initial) return;
     const t = setTimeout(() => commit(value), delayMs);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return [value, setValue] as const;
 }

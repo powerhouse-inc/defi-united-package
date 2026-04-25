@@ -43,7 +43,9 @@ export function PublishActions({
               disabled={!canPublish}
               className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
               title={
-                canPublish ? undefined : "Title and body are required to publish"
+                canPublish
+                  ? undefined
+                  : "Title and body are required to publish"
               }
             >
               Publish

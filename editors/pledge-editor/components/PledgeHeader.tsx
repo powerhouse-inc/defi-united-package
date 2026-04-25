@@ -28,9 +28,7 @@ export function PledgeHeader({ state }: { state: PledgeState }) {
           ) : null}
         </p>
       </div>
-      <span
-        className={`pledge-status-pill ${STATUS_PILL_CLASS[state.status]}`}
-      >
+      <span className={`pledge-status-pill ${STATUS_PILL_CLASS[state.status]}`}>
         {STATUS_LABEL[state.status]}
       </span>
     </header>

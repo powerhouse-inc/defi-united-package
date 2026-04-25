@@ -7,11 +7,7 @@ type LinkedPledgesProps = {
   onUnlink: (pledgeId: string) => void;
 };
 
-export function LinkedPledges({
-  state,
-  onLink,
-  onUnlink,
-}: LinkedPledgesProps) {
+export function LinkedPledges({ state, onLink, onUnlink }: LinkedPledgesProps) {
   const [draft, setDraft] = useState("");
   const blocks = state.blocks ?? [];
 
@@ -54,9 +50,7 @@ export function LinkedPledges({
       </form>
 
       {blocks.length === 0 ? (
-        <p className="text-sm italic text-slate-500">
-          No pledges linked yet.
-        </p>
+        <p className="text-sm italic text-slate-500">No pledges linked yet.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {blocks.map((pledgeId) => (

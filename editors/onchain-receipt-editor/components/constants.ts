@@ -34,7 +34,11 @@ export const STATUS_LABEL: Record<ReconciliationStatus, string> = {
 };
 
 /** Truncate an address-like string to a short form. */
-export function truncate(value: string | null | undefined, lead = 6, tail = 4): string {
+export function truncate(
+  value: string | null | undefined,
+  lead = 6,
+  tail = 4,
+): string {
   if (!value) return "—";
   if (value.length <= lead + tail + 1) return value;
   return `${value.slice(0, lead)}…${value.slice(-tail)}`;
