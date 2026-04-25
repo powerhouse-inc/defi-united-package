@@ -3,5 +3,8 @@
  * This file is auto-generated and updated by codegen
  */
 import type { UpgradeManifest } from "document-model";
+import { reliefCampaignUpgradeManifest } from "document-models/relief-campaign/upgrades";
 
-export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [];
+export const upgradeManifests: UpgradeManifest<readonly number[]>[] = [
+  reliefCampaignUpgradeManifest,
+];

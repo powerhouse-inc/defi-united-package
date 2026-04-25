@@ -1,4 +1,1 @@
-/**
- * WARNING: DO NOT EDIT
- * This file is auto-generated and updated by codegen
- */
+export { ReliefCampaign as ReliefCampaignV1 } from "./relief-campaign/v1/module.js";

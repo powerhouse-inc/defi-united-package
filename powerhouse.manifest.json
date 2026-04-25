@@ -1,15 +1,20 @@
 {
-  "name": "defi-united-package",
-  "description": "Operational toolkit for coordinated DeFi relief / crisis response coalitions. First instance: DeFi United (April 2026 rsETH incident).",
-  "category": "DeFi",
-  "publisher": {
-    "name": "Powerhouse",
-    "url": "https://powerhouse.inc"
-  },
-  "documentModels": [],
-  "apps": [],
-  "editors": [],
-  "processors": [],
-  "subgraphs": [],
-  "config": []
+	"name": "defi-united-package",
+	"description": "Operational toolkit for coordinated DeFi relief / crisis response coalitions. First instance: DeFi United (April 2026 rsETH incident).",
+	"category": "DeFi",
+	"publisher": {
+		"name": "Powerhouse",
+		"url": "https://powerhouse.inc"
+	},
+	"documentModels": [
+		{
+			"id": "defi-united/relief-campaign",
+			"name": "ReliefCampaign"
+		}
+	],
+	"apps": [],
+	"editors": [],
+	"processors": [],
+	"subgraphs": [],
+	"config": []
 }
