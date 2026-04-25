@@ -16,8 +16,12 @@
 			"name": "ContributorProfile"
 		},
 		{
-			"name": "Pledge",
-			"id": "defi-united/pledge"
+			"id": "defi-united/pledge",
+			"name": "Pledge"
+		},
+		{
+			"name": "ExternalDependency",
+			"id": "defi-united/external-dependency"
 		}
 	],
 	"apps": [],
