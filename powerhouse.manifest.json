@@ -24,8 +24,12 @@
 			"name": "ExternalDependency"
 		},
 		{
-			"name": "OnchainReceipt",
-			"id": "defi-united/onchain-receipt"
+			"id": "defi-united/onchain-receipt",
+			"name": "OnchainReceipt"
+		},
+		{
+			"name": "DistributionPlan",
+			"id": "defi-united/distribution-plan"
 		}
 	],
 	"apps": [],
