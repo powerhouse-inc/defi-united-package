@@ -12,8 +12,12 @@
 			"name": "ReliefCampaign"
 		},
 		{
-			"name": "ContributorProfile",
-			"id": "defi-united/contributor-profile"
+			"id": "defi-united/contributor-profile",
+			"name": "ContributorProfile"
+		},
+		{
+			"name": "Pledge",
+			"id": "defi-united/pledge"
 		}
 	],
 	"apps": [],
