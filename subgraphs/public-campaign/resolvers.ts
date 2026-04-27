@@ -188,9 +188,12 @@ export const getResolvers = (
       const all = await subgraph.reactorClient.find({
         type: RELIEF_CAMPAIGN_TYPE,
       });
-      const campaign = (all.results as ReliefCampaignDocument[]).find(
-        (c) => c.state.global.slug === args.slug,
-      );
+      // Skip archived campaigns even when looked up by slug — orphans
+      // from prior seed attempts get archived but their old slug still
+      // resolves to a stale doc otherwise.
+      const campaign = (all.results as ReliefCampaignDocument[])
+        .filter((c) => c.state.global.status !== "ARCHIVED")
+        .find((c) => c.state.global.slug === args.slug);
       if (!campaign) return null;
       return buildPublicCampaign(subgraph.reactorClient, campaign);
     },
@@ -206,6 +209,11 @@ export const getResolvers = (
       if (args.status) {
         campaigns = campaigns.filter(
           (c) => c.state.global.status === args.status,
+        );
+      } else {
+        // Default: hide archived from public listings.
+        campaigns = campaigns.filter(
+          (c) => c.state.global.status !== "ARCHIVED",
         );
       }
       const projected = await Promise.all(
