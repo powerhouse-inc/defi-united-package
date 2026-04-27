@@ -146,6 +146,98 @@ When the rsETH effort wraps, the campaign drive can be archived without disturbi
 
 ---
 
+## Distributed sync — drives across nodes
+
+Powerhouse drives are **not** owned by a single Switchboard. They're a peer-to-peer construct: any node (a Switchboard, a Connect webapp, even a CLI script) can hold a copy of the drive and exchange operations with other nodes that hold the same drive id. Because reducers are pure and operations are append-only, every node converges on the same state — no central authority required.
+
+This is why the package is shaped the way it is: the document models, editors, processors, and subgraphs all run **per-node**, against the local copy of the drive. The decentralization happens at the sync layer.
+
+### How sync works
+
+Each drive carries two operation lists in its own state:
+
+| | What it's for |
+|---|---|
+| **Listeners** (`ADD_LISTENER` / `REMOVE_LISTENER`) | "Push my new operations to this URL." Outbound: the drive announces operations to subscribers. |
+| **Triggers** (`ADD_TRIGGER` / `REMOVE_TRIGGER`) | "Fetch operations from this URL." Inbound: the drive pulls from upstream sources. |
+
+Both are stored as ordinary operations on the drive document, so the sync topology itself is auditable and replayable. A drive with one trigger pulling from a Switchboard and one listener pushing to a backup Switchboard becomes a 2-node mirror without any out-of-band config.
+
+A typical exchange between two nodes:
+
+1. **Node A** receives a new operation locally (operator dispatched a `markConfirmed` action via Connect, or a processor recorded a receipt)
+2. The operation is appended to the local drive's operation log with a deterministic hash + index
+3. Node A's listeners notify Node B's trigger endpoint that there's a new operation
+4. Node B requests it (or B's trigger polls for new ones)
+5. Node B applies the operation to its local drive — same reducer, same input, same resulting state
+6. Both nodes now hold identical drive state
+
+If two operators dispatch concurrently on different nodes, both operations land in their respective logs. When the nodes sync, the operations interleave by their `(timestamp, hash)` ordering, the merged log replays through the reducer, and both nodes converge on the same final state. There's no merge conflict surface to resolve manually — the reducer's determinism does the work.
+
+### Topology in practice
+
+For the DeFi United DAO, a realistic decentralized setup looks like:
+
+```
+                ┌────────────────────────────────────────────────┐
+                │          Per-campaign drive                    │
+                │       defi-united-rseth-2026-04                │
+                └────────────────────────────────────────────────┘
+                       ▲              ▲              ▲
+                       │              │              │
+                       │ sync         │ sync         │ sync
+                       │              │              │
+   ┌───────────────────┴───┐  ┌───────┴────────┐  ┌──┴────────────────┐
+   │ Switchboard           │  │ Switchboard    │  │ Switchboard       │
+   │ defiunited.world      │  │ aave.dao       │  │ archive.eth-      │
+   │ (canonical operator)  │  │ (DAO mirror)   │  │  foundation.org   │
+   └───────────────────────┘  └────────────────┘  └───────────────────┘
+                       ▲              ▲              ▲
+                       │              │              │
+                       └──────┬───────┴──────────────┘
+                              │ subscribe / mirror
+                              │
+                ┌─────────────┴─────────────────┐
+                │ Connect webapp                │
+                │ (an operator's browser tab    │
+                │  carrying its own drive copy) │
+                └───────────────────────────────┘
+```
+
+What this enables:
+
+- **Multi-DAO coordination**: Aave's tenant, Mantle's tenant, and the operator's tenant all hold the same campaign drive. Each DAO sees the up-to-the-second state without trusting any single party's database.
+- **Resilience**: if `defiunited.world` goes offline, the drive lives on in the other Switchboards. Anyone can re-host it — the drive id and the operation log are sufficient to reconstruct everything.
+- **Offline operation**: a Connect webapp can dispatch actions while disconnected (operations land in IndexedDB locally), then sync when the network comes back. The reducer's purity guarantees no divergence.
+- **Public verifiability**: a third-party observer can run their own read-only mirror and reproduce every total, every audit trail, every dependency state — without asking anyone for permission.
+- **Sovereign listening**: an external dashboard or analytics pipeline can be added as a listener and start receiving operations live, without re-exposing the source database.
+
+### What runs where
+
+| Concern | Per-node? | Notes |
+|---|---|---|
+| Document storage (the drive's operation log) | Yes — every node holds a copy | Sync brings them into agreement |
+| Reducers | Yes — every node replays them locally | Pure, deterministic — same result everywhere |
+| Editors (Connect) | Per-Connect-instance | Operators see their local drive copy |
+| Processors | Configured per-Switchboard | Usually only one node runs a given processor (avoid duplicate dispatches) — typically the operator's canonical Switchboard. Other nodes consume the resulting operations passively. |
+| Subgraphs | Per-Switchboard | Each Switchboard exposes its own GraphQL view over its local drive copy. Frontends can query whichever endpoint they trust. |
+| External integrations (Alchemy, Chainlink, ENS) | Wherever processors run | The on-chain reads happen on the canonical Switchboard; the resulting receipts sync to peers as ordinary operations. |
+
+### Why this matters for relief coalitions
+
+Funding events for a DeFi crisis typically span several DAOs, each with its own governance, ops team, and trust assumptions. Traditional models force everyone to agree on whose backend is canonical — a political and operational bottleneck.
+
+With this architecture:
+
+- The coalition can run multiple peer Switchboards. Aave's ops team writes to theirs; Mantle's writes to theirs; both sync into a shared drive. No single tenant is the source of truth.
+- Each DAO's frontend can read from whichever Switchboard they trust.
+- The on-chain receipt watcher only needs to run on **one** node — its receipts sync as operations to all the others. Same for the Chainlink price reads.
+- If the coalition wants to wind down operations and hand off to an archival custodian, that's just adding a new listener and removing the old ones.
+
+The model is "federated by default": every participant runs their own copy, with sync as a first-class drive concept rather than a later-bolted-on RPC layer.
+
+---
+
 ## Editors
 
 An **editor** is a React component that operates on one or more documents. Connect (the operator UI) loads them from the package and renders one when an operator opens a document.
