@@ -141,6 +141,9 @@ export const schema: DocumentNode = gql`
     blockNumber: Int!
     blockTimestamp: String!
     fromAddress: String!
+    """ENS primary name for fromAddress (mainnet only). Reverse-resolved
+    via the Universal Resolver, cached server-side 24h."""
+    fromEnsName: String
     toAddress: String!
     assetSymbol: String!
     assetContractAddress: String

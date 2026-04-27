@@ -65,6 +65,8 @@ export interface PublicReceiptEntry {
   blockNumber: number;
   blockTimestamp: string;
   fromAddress: string;
+  /** Reverse-resolved ENS primary name for `fromAddress`, if any. */
+  fromEnsName: string | null;
   toAddress: string;
   assetSymbol: string;
   assetContractAddress: string | null;
@@ -255,6 +257,9 @@ export function projectCampaign(
         blockNumber: rs.blockNumber ?? 0,
         blockTimestamp: rs.blockTimestamp ?? "",
         fromAddress: rs.fromAddress ?? "",
+        // Document-derived receipts don't carry ENS; the live overlay
+        // resolves it for the on-chain feed only.
+        fromEnsName: null,
         toAddress: rs.toAddress ?? "",
         assetSymbol: rs.asset?.symbol ?? "ETH",
         assetContractAddress: rs.asset?.contractAddress ?? null,

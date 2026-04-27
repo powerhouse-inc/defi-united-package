@@ -19,6 +19,7 @@ import {
   type AlchemyTransfer,
 } from "../../processors/onchain-receipt-watcher/eth-rpc.js";
 import type { OnchainLiveBalance, PublicReceiptEntry } from "./projections.js";
+import { resolveEnsBatch } from "./ens.js";
 
 interface AcceptedAsset {
   symbol: string;
@@ -236,13 +237,21 @@ export async function fetchRecentTransfers(
       order: "desc",
     });
 
-    const entries: PublicReceiptEntry[] = page.transfers
-      .filter((t: AlchemyTransfer) => {
-        if (t.value == null || t.value <= 0) return false;
-        if (t.category === "external") return true;
-        const addr = t.rawContract?.address?.toLowerCase();
-        return !!addr && ERC20_CONTRACTS.includes(addr);
-      })
+    const filtered = page.transfers.filter((t: AlchemyTransfer) => {
+      if (t.value == null || t.value <= 0) return false;
+      if (t.category === "external") return true;
+      const addr = t.rawContract?.address?.toLowerCase();
+      return !!addr && ERC20_CONTRACTS.includes(addr);
+    });
+
+    // Reverse-resolve ENS for every distinct sender in parallel.
+    // The helper caches per-address for 24h, so repeat polls are free.
+    const ensNames = await resolveEnsBatch(
+      opts.alchemyUrl,
+      filtered.map((t) => t.from),
+    );
+
+    const entries: PublicReceiptEntry[] = filtered
       .map((t: AlchemyTransfer): PublicReceiptEntry => {
         const symbol =
           t.category === "external" ? "ETH" : (t.asset ?? "ERC20").toUpperCase();
@@ -254,6 +263,7 @@ export async function fetchRecentTransfers(
           blockNumber: parseInt(t.blockNum, 16),
           blockTimestamp: t.metadata?.blockTimestamp ?? "",
           fromAddress: t.from,
+          fromEnsName: ensNames.get(t.from.toLowerCase()) ?? null,
           toAddress: t.to,
           assetSymbol: symbol,
           assetContractAddress:
