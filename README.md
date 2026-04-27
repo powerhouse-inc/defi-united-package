@@ -25,48 +25,6 @@ The campaign drive isn't tied to a single Switchboard. Multiple DAOs can each ru
 
 This is what lets a public observer reproduce every total without trusting anyone, lets the coalition survive any single tenant going offline, and removes the political bottleneck of "whose backend is canonical?". See [`docs/architecture.md#distributed-sync--drives-across-nodes`](docs/architecture.md#distributed-sync--drives-across-nodes) for the topology, convergence rules, and what runs per-node vs canonically.
 
-## Architecture at a glance
-
-```
-                         Ethereum mainnet
-                                ▲
-                                │ alchemy_getAssetTransfers
-                                │ eth_call balanceOf / Chainlink ETH/USD
-                                │ ENS Universal Resolver (reverse names)
-                                │
-   ┌────────────────────────────┴─────────────────────────────────┐
-   │                       Switchboard                            │
-   │                                                              │
-   │  ┌───────────────────────┐   ┌──────────────────────────┐    │
-   │  │ Processor             │   │ Subgraph                 │    │
-   │  │ onchain-receipt-      │   │ public-campaign          │    │
-   │  │ watcher               │ ─►│                          │    │
-   │  │                       │   │ totalReceived =          │    │
-   │  │ poll Alchemy → record │   │   Σ receipts             │    │
-   │  │ receipts on the drive │   │ onchainLiveBalance =     │    │
-   │  │                       │   │   live balanceOf overlay │    │
-   │  │ Chainlink-priced      │   │ recentOnchainTransfers = │    │
-   │  │ at block time         │   │   real Alchemy feed      │    │
-   │  └───────────┬───────────┘   │   (ENS-resolved senders) │    │
-   │              ▼               └──────────────────────────┘    │
-   │   ┌──────────────────────────────────────────────────────┐   │
-   │   │ Document drive                                       │   │
-   │   │   ReliefCampaign × 1                                 │   │
-   │   │   Pledge × N (incl. GOVERNANCE_PENDING ratifications)│   │
-   │   │   OnchainReceipt × N (ETH-equivalent valued)         │   │
-   │   │   ExternalDependency × N (operational blockers)      │   │
-   │   │   DistributionPlan, StatusUpdate, ContributorProfile │   │
-   │   └──────────────────────────────────────────────────────┘   │
-   └──────────────────────────────────────────────────────────────┘
-                                ▲
-                                │ GraphQL (poll 5s)
-                                │
-                         Frontend (defiunited-web)
-                         Counter ticks instantly via the live
-                         overlay; settles into the audit trail
-                         when the processor records the receipt.
-```
-
 ## Document models
 
 Seven first-class document types covering the full operational loop.
