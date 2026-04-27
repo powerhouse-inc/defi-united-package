@@ -62,9 +62,11 @@ export function AddRecipientInputSchema(): z.ZodObject<
   Properties<AddRecipientInput>
 > {
   return z.object({
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     allocatedAmount: z.number(),
     chainId: z.number(),
     id: z.string(),
@@ -123,9 +125,11 @@ export function DistributionRecipientSchema(): z.ZodObject<
 > {
   return z.object({
     __typename: z.literal("DistributionRecipient").optional(),
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     allocatedAmount: z.number(),
     chainId: z.number(),
     id: z.string(),

@@ -60,9 +60,11 @@ export function AddWalletInputSchema(): z.ZodObject<
   Properties<AddWalletInput>
 > {
   return z.object({
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     chainId: z.number(),
     id: z.string(),
     label: z.string().nullish(),
@@ -91,9 +93,11 @@ export function ContributorWalletSchema(): z.ZodObject<
 > {
   return z.object({
     __typename: z.literal("ContributorWallet").optional(),
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     chainId: z.number(),
     id: z.string(),
     label: z.string().nullish(),

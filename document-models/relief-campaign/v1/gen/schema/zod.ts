@@ -46,9 +46,11 @@ export function AddContributionAddressInputSchema(): z.ZodObject<
   Properties<AddContributionAddressInput>
 > {
   return z.object({
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     chainId: z.number(),
     id: z.string(),
     label: z.string().nullish(),
@@ -69,9 +71,11 @@ export function AddOperatorWalletInputSchema(): z.ZodObject<
   Properties<AddOperatorWalletInput>
 > {
   return z.object({
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
   });
 }
 
@@ -117,9 +121,11 @@ export function ContributionAddressSchema(): z.ZodObject<
 > {
   return z.object({
     __typename: z.literal("ContributionAddress").optional(),
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     chainId: z.number(),
     id: z.string(),
     label: z.string().nullish(),
@@ -163,9 +169,11 @@ export function ReliefCampaignStateSchema(): z.ZodObject<
     incidentDate: z.iso.datetime().nullish(),
     name: z.string(),
     operatorWallets: z.array(
-      z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-        message: "Invalid Ethereum address format",
-      }),
+      z
+        .string()
+        .regex(/^0x[a-fA-F0-9]{40}$/, {
+          message: "Invalid Ethereum address format",
+        }),
     ),
     riskDisclaimer: z.string().nullish(),
     slug: z.string(),
@@ -187,9 +195,11 @@ export function RemoveOperatorWalletInputSchema(): z.ZodObject<
   Properties<RemoveOperatorWalletInput>
 > {
   return z.object({
-    address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    address: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
   });
 }
 
