@@ -1,10 +1,15 @@
 import { setSelectedNode } from "@powerhousedao/reactor-browser";
 
+import { formatAmount } from "../utils/formatting.js";
+import { exportToCsv } from "../utils/csv.js";
+
 import type { ExternalDependencyDocument } from "../../../document-models/external-dependency/v1/gen/types.js";
 import type { DependencyStatus } from "../../../document-models/external-dependency/v1/gen/schema/types.js";
+import type { PledgeDocument } from "../../../document-models/pledge/v1/gen/types.js";
 
 interface DependencyGridProps {
   dependencies: ExternalDependencyDocument[];
+  pledges: PledgeDocument[];
 }
 
 const STATUS_COLORS: Record<
@@ -30,9 +35,44 @@ function selectNode(nodeId: string) {
   setSelectedNode(nodeId);
 }
 
-export function DependencyGrid({ dependencies }: DependencyGridProps) {
+export function DependencyGrid({ dependencies, pledges }: DependencyGridProps) {
+  const pledgesMap = new Map(pledges.map((p) => [p.header.id, p]));
+
+  function getPledgeLabel(pledgeId: string): string {
+    const pledge = pledgesMap.get(pledgeId);
+    if (!pledge) return pledgeId.slice(0, 10);
+    const amount = pledge.state.global.pledgedAmount;
+    const symbol = pledge.state.global.asset?.symbol;
+    if (amount != null && symbol) return `${formatAmount(amount)} ${symbol}`;
+    if (pledge.state.global.publicNotes)
+      return pledge.state.global.publicNotes.slice(0, 30);
+    return pledgeId.slice(0, 10);
+  }
+
+  function handlePledgeClick(e: React.MouseEvent, pledgeId: string): void {
+    e.stopPropagation();
+    selectNode(pledgeId);
+  }
+
+  function handleExportCsv() {
+    const rows = sorted.map((dep) => {
+      const state = dep.state.global;
+      return [
+        state.title,
+        state.kind,
+        state.status,
+        state.assignee ?? "",
+        state.blocks.length.toString(),
+      ];
+    });
+    exportToCsv({
+      headers: ["Title", "Kind", "Status", "Assignee", "Blocked Pledges"],
+      rows,
+      filename: "dependencies.csv",
+    });
+  }
+
   const sorted = [...dependencies].sort((a, b) => {
-    // Active states first, resolved/abandoned last
     const order: Record<DependencyStatus, number> = {
       BLOCKED: 0,
       IN_PROGRESS: 1,
@@ -44,59 +84,108 @@ export function DependencyGrid({ dependencies }: DependencyGridProps) {
   });
 
   return (
-    <section className="defi-united-ops__card defi-united-ops__deps">
-      <h3 className="defi-united-ops__card-title">External dependencies</h3>
-
+    <div className="defi-united-ops__deps">
       {sorted.length === 0 ? (
-        <span className="defi-united-ops__empty">
-          No external dependencies tracked yet.
-        </span>
+        <div className="defi-united-ops__empty-state">
+          <span
+            className="defi-united-ops__empty-state-icon"
+            aria-hidden="true"
+          >
+            📋
+          </span>
+          <div className="defi-united-ops__empty-state-label">
+            No external dependencies tracked yet
+          </div>
+          <div className="defi-united-ops__empty-state-desc">
+            Add a <code>defi-united/external-dependency</code> document to track
+            blockers and prerequisites.
+          </div>
+        </div>
       ) : (
-        <ul className="defi-united-ops__deps-list">
-          {sorted.map((dep) => {
-            const state = dep.state.global;
-            const colors = STATUS_COLORS[state.status];
-            return (
-              <li
-                key={dep.header.id}
-                className="defi-united-ops__deps-row defi-united-ops__row-clickable"
-                role="button"
-                tabIndex={0}
-                onClick={() => selectNode(dep.header.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectNode(dep.header.id);
-                  }
-                }}
-              >
-                <span
-                  className="defi-united-ops__deps-bar"
-                  style={{ backgroundColor: colors.bar }}
-                  aria-hidden="true"
-                />
-                <div className="defi-united-ops__deps-body">
-                  <div className="defi-united-ops__deps-title">
-                    {state.title}
-                  </div>
-                  <div className="defi-united-ops__deps-meta">
-                    <span>{KIND_LABELS[state.kind] ?? state.kind}</span>
-                    {state.assignee ? <span>· {state.assignee}</span> : null}
-                    {state.blocks.length > 0 ? (
-                      <span>· blocks {state.blocks.length}</span>
-                    ) : null}
-                  </div>
-                </div>
-                <span
-                  className="defi-united-ops__deps-pill"
-                  style={{ backgroundColor: colors.bg, color: colors.fg }}
+        <>
+          <div className="defi-united-ops__deps-toolbar">
+            <span className="defi-united-ops__deps-count">
+              {sorted.length}{" "}
+              {sorted.length === 1 ? "dependency" : "dependencies"}
+            </span>
+            <button
+              type="button"
+              className="defi-united-ops__csv-btn"
+              onClick={handleExportCsv}
+              title="Export dependencies as CSV"
+            >
+              ↓ CSV
+            </button>
+          </div>
+          <ul className="defi-united-ops__deps-list">
+            {sorted.map((dep) => {
+              const state = dep.state.global;
+              const colors = STATUS_COLORS[state.status];
+              return (
+                <li
+                  key={dep.header.id}
+                  className="defi-united-ops__deps-row defi-united-ops__row-clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => selectNode(dep.header.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectNode(dep.header.id);
+                    }
+                  }}
                 >
-                  {state.status.replace(/_/g, " ")}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                  <span
+                    className="defi-united-ops__deps-bar"
+                    style={{ backgroundColor: colors.bar }}
+                    aria-hidden="true"
+                  />
+                  <div className="defi-united-ops__deps-body">
+                    <div className="defi-united-ops__deps-title">
+                      {state.title}
+                    </div>
+                    <div className="defi-united-ops__deps-meta">
+                      <span>{KIND_LABELS[state.kind] ?? state.kind}</span>
+                      {state.assignee ? (
+                        <span>&middot; {state.assignee}</span>
+                      ) : null}
+                      {state.blocks.length > 0 ? (
+                        <>
+                          <span>&middot; blocks</span>
+                          {state.blocks.map((pledgeId) => (
+                            <span
+                              key={pledgeId}
+                              className="defi-united-ops__deps-block-link"
+                              role="button"
+                              tabIndex={0}
+                              title={`Open pledge: ${getPledgeLabel(pledgeId)}`}
+                              onClick={(e) => handlePledgeClick(e, pledgeId)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  selectNode(pledgeId);
+                                }
+                              }}
+                            >
+                              {getPledgeLabel(pledgeId)}
+                            </span>
+                          ))}
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span
+                    className="defi-united-ops__deps-pill"
+                    style={{ backgroundColor: colors.bg, color: colors.fg }}
+                  >
+                    {state.status.replace(/_/g, " ")}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       <style>{`
@@ -152,7 +241,52 @@ export function DependencyGrid({ dependencies }: DependencyGridProps) {
           border-radius: 999px;
           white-space: nowrap;
         }
+        .defi-united-ops__deps-block-link {
+          color: #1a4dd6;
+          cursor: pointer;
+          white-space: nowrap;
+          user-select: none;
+        }
+        .defi-united-ops__deps-block-link:hover {
+          text-decoration: underline;
+        }
+        .defi-united-ops__deps-block-link:focus {
+          outline: 2px solid #1a4dd6;
+          outline-offset: 2px;
+          border-radius: 2px;
+        }
+        .defi-united-ops__deps-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .defi-united-ops__deps-count {
+          font-size: 11px;
+          color: #6b7280;
+        }
+        .defi-united-ops__csv-btn {
+          font-size: 11px;
+          font-weight: 600;
+          color: #6b7280;
+          background: transparent;
+          border: 1px solid #e6e8ec;
+          border-radius: 4px;
+          padding: 2px 6px;
+          cursor: pointer;
+          font-family: inherit;
+          line-height: 1.4;
+        }
+        .defi-united-ops__csv-btn:hover {
+          color: #0f1115;
+          border-color: #c8d0db;
+          background-color: #f7f8fa;
+        }
+        .defi-united-ops__csv-btn:focus {
+          outline: 2px solid #1a4dd6;
+          outline-offset: 1px;
+        }
       `}</style>
-    </section>
+    </div>
   );
 }

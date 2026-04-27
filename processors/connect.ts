@@ -1,6 +1,9 @@
 /**
- * WARNING: DO NOT EDIT
- * This file is auto-generated and updated by codegen
+ * Connect-specific processor factory builders.
+ *
+ * Processors registered here only run when the host app is "connect".
+ * The defi-united package does not require any connect-side processors;
+ * all processing runs on switchboard.
  */
 import type { ProcessorFactoryBuilder } from "@powerhousedao/reactor";
 

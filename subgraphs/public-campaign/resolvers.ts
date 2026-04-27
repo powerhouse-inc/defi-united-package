@@ -1,3 +1,4 @@
+import { PubSub, withFilter } from "graphql-subscriptions";
 import type { BaseSubgraph } from "@powerhousedao/reactor-api";
 import type { ReliefCampaignDocument } from "../../document-models/relief-campaign/v1/gen/types.js";
 import type { PledgeDocument } from "../../document-models/pledge/v1/gen/types.js";
@@ -5,6 +6,7 @@ import type { ContributorProfileDocument } from "../../document-models/contribut
 import type { ExternalDependencyDocument } from "../../document-models/external-dependency/v1/gen/types.js";
 import type { OnchainReceiptDocument } from "../../document-models/onchain-receipt/v1/gen/types.js";
 import type { StatusUpdateDocument } from "../../document-models/status-update/v1/gen/types.js";
+import type { PHDocument } from "document-model";
 import type { CampaignBundle, PublicCampaign } from "./projections.js";
 import { projectCampaign } from "./projections.js";
 
@@ -14,6 +16,20 @@ const ONCHAIN_RECEIPT_TYPE = "defi-united/onchain-receipt";
 const EXTERNAL_DEPENDENCY_TYPE = "defi-united/external-dependency";
 const STATUS_UPDATE_TYPE = "defi-united/status-update";
 const CONTRIBUTOR_PROFILE_TYPE = "defi-united/contributor-profile";
+
+const CAMPAIGN_RELATED_TYPES = [
+  RELIEF_CAMPAIGN_TYPE,
+  PLEDGE_TYPE,
+  ONCHAIN_RECEIPT_TYPE,
+  EXTERNAL_DEPENDENCY_TYPE,
+  STATUS_UPDATE_TYPE,
+];
+
+const pubSub = new PubSub();
+
+const CAMPAIGN_UPDATED = "CAMPAIGN_UPDATED";
+const RECEIPT_ARRIVED = "RECEIPT_ARRIVED";
+const STATUS_UPDATE_PUBLISHED = "STATUS_UPDATE_PUBLISHED";
 
 interface DriveBundle {
   driveId: string;
@@ -57,7 +73,6 @@ async function loadContributorRegistry(
   const registryDriveId = campaign.state.global.contributorRegistryDriveId;
   const map = new Map<string, ContributorProfileDocument>();
 
-  // Try the linked DAO drive first; fall back to a global search across drives.
   if (registryDriveId) {
     try {
       const found = await reactorClient.find({
@@ -117,6 +132,33 @@ async function buildPublicCampaign(
   return projectCampaign(bundle);
 }
 
+// Drive ID → campaign mapping, populated during onSetup
+const driveToCampaign = new Map<string, ReliefCampaignDocument>();
+
+function projectReceipt(
+  receipt: OnchainReceiptDocument,
+  campaign: ReliefCampaignDocument,
+): Record<string, unknown> {
+  const r = receipt.state.global;
+  return {
+    id: receipt.header.id,
+    campaignSlug: campaign.state.global.slug,
+    txHash: r.txHash || null,
+    fromAddress: r.fromAddress || null,
+    toAddress: r.toAddress || "",
+    amount: r.amount ? String(r.amount) : "0",
+    assetSymbol: r.asset?.symbol ?? "ETH",
+    chainId: r.chainId ?? null,
+    blockNumber: r.blockNumber ?? null,
+    blockTimestamp: r.blockTimestamp ?? null,
+    reconciliationStatus: r.reconciliationStatus,
+    matchedPledgeId: r.matchedPledgeId || null,
+  };
+}
+
+// Module-level unsubscribe tracking
+const unsubscribes: Array<() => void> = [];
+
 export const getResolvers = (
   subgraph: BaseSubgraph,
 ): Record<string, unknown> => ({
@@ -154,4 +196,153 @@ export const getResolvers = (
       return projected.filter((p): p is PublicCampaign => p !== null);
     },
   },
+
+  Subscription: {
+    DefiUnited_campaignUpdated: {
+      subscribe: withFilter(
+        () => pubSub.asyncIterableIterator(CAMPAIGN_UPDATED),
+        (payload, args) => {
+          const slug = (args as { slug?: string } | undefined)?.slug;
+          if (slug) return (payload as PublicCampaign).slug === slug;
+          return true;
+        },
+      ),
+      resolve: (value: PublicCampaign) => value,
+    },
+
+    DefiUnited_receiptArrived: {
+      subscribe: withFilter(
+        () => pubSub.asyncIterableIterator(RECEIPT_ARRIVED),
+        (payload, args) => {
+          const slug = (args as { slug: string } | undefined)?.slug;
+          return slug
+            ? (payload as Record<string, unknown>).campaignSlug === slug
+            : true;
+        },
+      ),
+      resolve: (value: Record<string, unknown>) => value,
+    },
+
+    DefiUnited_statusUpdatePublished: {
+      subscribe: withFilter(
+        () => pubSub.asyncIterableIterator(STATUS_UPDATE_PUBLISHED),
+        (payload, args) => {
+          const slug = (args as { slug: string } | undefined)?.slug;
+          return slug
+            ? (payload as Record<string, unknown>).campaignSlug === slug
+            : true;
+        },
+      ),
+      resolve: (value: Record<string, unknown>) => value,
+    },
+  },
 });
+
+// Exported so the subgraph class can call it
+export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
+  // Build driveId → campaign map
+  const all = await subgraph.reactorClient.find({
+    type: RELIEF_CAMPAIGN_TYPE,
+  });
+  for (const campaign of all.results as ReliefCampaignDocument[]) {
+    const parents = await subgraph.reactorClient.getParents(campaign.header.id);
+    const drive = parents.results.at(0);
+    if (drive) {
+      driveToCampaign.set(drive.header.id, campaign);
+    }
+  }
+
+  // Subscribe to each campaign-related document type separately
+  // (SearchFilter.type only accepts a single string)
+  const handleDocumentChange = async (
+    docType: string,
+    doc: PHDocument,
+  ): Promise<void> => {
+    const changedDocId = doc.header.id;
+
+    // Get the parent drive of the changed document
+    const parents = await subgraph.reactorClient.getParents(changedDocId);
+    const drive = parents.results.at(0);
+    if (!drive) return;
+
+    const campaign = driveToCampaign.get(drive.header.id);
+    if (!campaign) return;
+
+    const slug = campaign.state.global.slug;
+
+    // Re-project the full campaign
+    const projected = await buildPublicCampaign(
+      subgraph.reactorClient,
+      campaign,
+    );
+
+    if (projected) {
+      pubSub.publish(CAMPAIGN_UPDATED, { ...projected });
+    }
+
+    // If it's a receipt, also publish the receipt-specific event
+    if (docType === ONCHAIN_RECEIPT_TYPE) {
+      const receipts = await subgraph.reactorClient.find({
+        type: ONCHAIN_RECEIPT_TYPE,
+        parentId: drive.header.id,
+      });
+      const receipt = (receipts.results as OnchainReceiptDocument[]).find(
+        (r) => r.header.id === changedDocId,
+      );
+      if (receipt) {
+        pubSub.publish(RECEIPT_ARRIVED, {
+          ...projectReceipt(receipt, campaign),
+        });
+      }
+    }
+
+    // If it's a published status update, publish that event too
+    if (docType === STATUS_UPDATE_TYPE) {
+      const updates = await subgraph.reactorClient.find({
+        type: STATUS_UPDATE_TYPE,
+        parentId: drive.header.id,
+      });
+      const update = (updates.results as StatusUpdateDocument[]).find(
+        (u) => u.header.id === changedDocId,
+      );
+      if (update && update.state.global.publishedAt) {
+        const us = update.state.global;
+        pubSub.publish(STATUS_UPDATE_PUBLISHED, {
+          campaignSlug: slug,
+          id: update.header.id,
+          publishedAt: us.publishedAt,
+          title: us.title,
+          body: us.body,
+          metricsTotalPledged: us.metricsSnapshot?.totalPledged
+            ? String(us.metricsSnapshot.totalPledged)
+            : null,
+          metricsTotalReceived: us.metricsSnapshot?.totalReceived
+            ? String(us.metricsSnapshot.totalReceived)
+            : null,
+          externalAnnouncements: us.externalAnnouncements.map((e) => ({
+            platform: e.platform,
+            url: e.url,
+          })),
+        });
+      }
+    }
+  };
+
+  for (const docType of CAMPAIGN_RELATED_TYPES) {
+    const unsub = subgraph.reactorClient.subscribe(
+      { type: docType },
+      (event) => {
+        for (const doc of event.documents) {
+          handleDocumentChange(docType, doc);
+        }
+      },
+    );
+    unsubscribes.push(unsub);
+  }
+}
+
+// Exported so the subgraph class can call it
+export function teardownDocumentChangeListener() {
+  for (const unsub of unsubscribes) unsub();
+  unsubscribes.length = 0;
+}

@@ -1,7 +1,10 @@
+import { formatAmount } from "../utils/formatting.js";
+
 import type { ReliefCampaignDocument } from "../../../document-models/relief-campaign/v1/gen/types.js";
 import type { PledgeDocument } from "../../../document-models/pledge/v1/gen/types.js";
 import type { OnchainReceiptDocument } from "../../../document-models/onchain-receipt/v1/gen/types.js";
 import type { CampaignStatus } from "../../../document-models/relief-campaign/v1/gen/schema/types.js";
+import { useState } from "react";
 
 interface HeaderStripProps {
   driveName: string;
@@ -18,14 +21,6 @@ const STATUS_COLORS: Record<CampaignStatus, { bg: string; fg: string }> = {
   FAILED: { bg: "#fbe2e2", fg: "#a4191a" },
   ARCHIVED: { bg: "#eceef2", fg: "#525a6b" },
 };
-
-function formatTokens(value: number | undefined | null): string {
-  if (value == null || Number.isNaN(value)) return "—";
-  if (value === 0) return "0";
-  if (value >= 100) return value.toFixed(0);
-  if (value >= 1) return value.toFixed(2);
-  return value.toFixed(4);
-}
 
 function findLastUpdate(
   campaign: ReliefCampaignDocument | undefined,
@@ -51,6 +46,8 @@ export function HeaderStrip({
   pledges,
   receipts,
 }: HeaderStripProps) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   const status = campaign?.state.global.status ?? "DRAFT";
   const statusColors = STATUS_COLORS[status];
   const target = campaign?.state.global.targetAmount ?? null;
@@ -65,6 +62,11 @@ export function HeaderStrip({
     const amt = r.state.global.amount ?? 0;
     return sum + (amt || 0);
   }, 0);
+
+  const pendingDelta = totalPledged - totalReceived;
+  const unmatchedCount = receipts.filter(
+    (r) => r.state.global.reconciliationStatus === "UNMATCHED",
+  ).length;
 
   const percentReceived =
     target && target > 0 ? Math.min(100, (totalReceived / target) * 100) : 0;
@@ -106,38 +108,53 @@ export function HeaderStrip({
       <div className="defi-united-ops__thermometer">
         <div className="defi-united-ops__thermo-numbers">
           <span className="defi-united-ops__thermo-received">
-            {formatTokens(totalReceived)} {assetSymbol}
+            {formatAmount(totalReceived)} {assetSymbol}
           </span>
           <span className="defi-united-ops__thermo-divider">/</span>
           <span className="defi-united-ops__thermo-target">
             {target == null
               ? "no target set"
-              : `${formatTokens(target)} ${assetSymbol}`}
+              : `${formatAmount(target)} ${assetSymbol}`}
           </span>
           <span className="defi-united-ops__thermo-pct">
             {target ? `${percentReceived.toFixed(1)}% received` : null}
           </span>
         </div>
-        <div className="defi-united-ops__thermo-bar">
+        <div
+          className="defi-united-ops__thermo-bar"
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
           <div
             className="defi-united-ops__thermo-fill defi-united-ops__thermo-fill--pledged"
             style={{ width: `${percentPledged}%` }}
-            title={`${formatTokens(totalPledged)} ${assetSymbol} pledged`}
+            title={`${formatAmount(totalPledged)} ${assetSymbol} pledged`}
           />
           <div
             className="defi-united-ops__thermo-fill defi-united-ops__thermo-fill--received"
             style={{ width: `${percentReceived}%` }}
-            title={`${formatTokens(totalReceived)} ${assetSymbol} received`}
+            title={`${formatAmount(totalReceived)} ${assetSymbol} received`}
           />
         </div>
+        {showTooltip ? (
+          <div className="defi-united-ops__thermo-tooltip">
+            <span>
+              {formatAmount(pendingDelta)} {assetSymbol} still pending
+            </span>
+            <span>
+              {unmatchedCount} unmatched{" "}
+              {unmatchedCount === 1 ? "receipt" : "receipts"}
+            </span>
+          </div>
+        ) : null}
         <div className="defi-united-ops__thermo-legend">
           <span>
             <i className="defi-united-ops__legend-dot defi-united-ops__legend-dot--received" />
-            Received {formatTokens(totalReceived)} {assetSymbol}
+            Received {formatAmount(totalReceived)} {assetSymbol}
           </span>
           <span>
             <i className="defi-united-ops__legend-dot defi-united-ops__legend-dot--pledged" />
-            Pledged {formatTokens(totalPledged)} {assetSymbol}
+            Pledged {formatAmount(totalPledged)} {assetSymbol}
           </span>
           <span className="defi-united-ops__thermo-last-update">
             Last activity · {lastUpdateLabel}
@@ -267,6 +284,25 @@ export function HeaderStrip({
         }
         .defi-united-ops__thermo-last-update {
           margin-left: auto;
+        }
+        .defi-united-ops__thermo-tooltip {
+          position: absolute;
+          top: -2px;
+          left: 0;
+          transform: translateY(-100%);
+          background: #0f1115;
+          color: #ffffff;
+          font-size: 11px;
+          line-height: 1.6;
+          padding: 6px 10px;
+          border-radius: 6px;
+          box-shadow: 0 2px 8px rgba(15, 17, 21, 0.2);
+          white-space: nowrap;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          z-index: 10;
+          pointer-events: none;
         }
       `}</style>
     </header>

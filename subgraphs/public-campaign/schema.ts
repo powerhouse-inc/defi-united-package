@@ -16,6 +16,23 @@ export const schema: DocumentNode = gql`
     ): [DefiUnited_PublicCampaign!]!
   }
 
+  """
+  Real-time campaign updates. Fires whenever a document belonging to a
+  campaign changes (pledge, receipt, dependency, status update, campaign).
+  """
+  type Subscription {
+    "Any campaign document changed — resolves to the full projected campaign."
+    DefiUnited_campaignUpdated(slug: String): DefiUnited_PublicCampaign
+
+    "A new on-chain receipt arrived for a campaign."
+    DefiUnited_receiptArrived(slug: String!): DefiUnited_PublicReceipt
+
+    "A status update was published or edited."
+    DefiUnited_statusUpdatePublished(
+      slug: String!
+    ): DefiUnited_PublicStatusUpdate
+  }
+
   enum DefiUnited_CampaignStatus {
     DRAFT
     ACTIVE
@@ -127,5 +144,24 @@ export const schema: DocumentNode = gql`
   type DefiUnited_PublicExternalLink {
     label: String!
     url: String!
+  }
+
+  """
+  Standalone receipt type for the subscription feed — mirrors the public
+  receipt properties without requiring a full campaign projection.
+  """
+  type DefiUnited_PublicReceipt {
+    id: String!
+    campaignSlug: String!
+    txHash: String
+    fromAddress: String
+    toAddress: String!
+    amount: String!
+    assetSymbol: String!
+    chainId: Int
+    blockNumber: Int
+    blockTimestamp: String
+    reconciliationStatus: String!
+    matchedPledgeId: String
   }
 `;
