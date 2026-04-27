@@ -230,6 +230,10 @@ export async function fetchRecentTransfers(
       category: ["external", "erc20"],
       contractAddresses: ERC20_CONTRACTS,
       maxCount: limit,
+      // We want the most recent N transfers regardless of how far
+      // back the window reaches — Alchemy returns them descending so
+      // capping at maxCount gives us the freshest entries first.
+      order: "desc",
     });
 
     const entries: PublicReceiptEntry[] = page.transfers

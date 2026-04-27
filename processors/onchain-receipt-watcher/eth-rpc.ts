@@ -121,6 +121,12 @@ export interface GetAssetTransfersOptions {
   /** Maximum 1000 per page; we default to 100. */
   maxCount?: number;
   pageKey?: string;
+  /**
+   * Result order. Default "asc" so the processor's incremental scan
+   * walks blocks chronologically. Use "desc" when you want the most
+   * recent N regardless of the window size (live ticker).
+   */
+  order?: "asc" | "desc";
 }
 
 export async function getAssetTransfers(
@@ -136,7 +142,7 @@ export async function getAssetTransfers(
     withMetadata: true,
     excludeZeroValue: true,
     maxCount: toHex(opts.maxCount ?? 100),
-    order: "asc",
+    order: opts.order ?? "asc",
   };
   if (opts.contractAddresses && opts.contractAddresses.length > 0) {
     params.contractAddresses = opts.contractAddresses.map((a) =>
