@@ -7,6 +7,7 @@ import type {
   AttachPledgeInput,
   ClearMatchInput,
   MarkAmbiguousInput,
+  MarkReorgedInput,
   OverrideMatchInput,
   RecordReceiptInput,
 } from "../types.js";
@@ -31,10 +32,15 @@ export type ClearMatchAction = Action & {
   type: "CLEAR_MATCH";
   input: ClearMatchInput;
 };
+export type MarkReorgedAction = Action & {
+  type: "MARK_REORGED";
+  input: MarkReorgedInput;
+};
 
 export type OnchainReceiptReconciliationAction =
   | RecordReceiptAction
   | AttachPledgeAction
   | MarkAmbiguousAction
   | OverrideMatchAction
-  | ClearMatchAction;
+  | ClearMatchAction
+  | MarkReorgedAction;

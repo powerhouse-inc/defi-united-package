@@ -1,495 +1,284 @@
 /**
  * Tests for the onchain-receipt-watcher processor.
  *
- * Tests cover:
- * - RPC polling with mocked fetch
- * - Receipt creation for new ERC-20 transfers
- * - Idempotency: same txHash not recorded twice
- * - Confirmation depth: only records after N confirmations
- * - Multiple active campaigns with overlapping addresses
- * - Processor lifecycle (start / disconnect)
+ * Strategy: spy on the helper functions exported from `eth-rpc.ts` (Alchemy
+ * + Chainlink calls) and on `m.dispatchExecute` to verify that the
+ * processor records receipts correctly without going to the network.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IProcessorHostModule } from "@powerhousedao/reactor-browser";
-import type { PHDocument } from "document-model";
+import type { OperationWithContext } from "document-model";
 
-import { buildOnchainReceiptWatcher } from "./index.js";
-import {
-  getLogs,
-  getBlockNumber,
-  buildErc20TransferFilter,
-  decodeAddressFromTopic,
-  decodeAmountFromData,
-  ERC20_TRANSFER_TOPIC,
-  type HexString,
-  type LogEntry,
-} from "./eth-rpc.js";
+import { __testing } from "./index.js";
+import * as ethRpc from "./eth-rpc.js";
+import type { AlchemyTransfer, HexString } from "./eth-rpc.js";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
-const CAMPAIGN_A_ID = "campaign-a-doc-id";
-const CAMPAIGN_B_ID = "campaign-b-doc-id";
-const CONTRIBUTION_ADDR_A = "0x1234567890123456789012345678901234567890";
-const CONTRIBUTION_ADDR_B = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
-const DONOR_ADDR = "0x9876543210987654321098765432109876543210";
+const CAMPAIGN_DOC_ID = "campaign-doc-123";
+const TREASURY = "0x0fca5194baa59a362a835031d9c4a25970effe68";
+const DONOR = "0x1234567890123456789012345678901234567890";
+const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
 function toHex(n: number): HexString {
   return `0x${n.toString(16)}`;
 }
 
-function padAddress(addr: string): string {
-  // ERC-20 Transfer topic pads the address to 32 bytes (64 hex chars)
-  const stripped = addr.startsWith("0x") ? addr.slice(2) : addr;
-  return "0x" + stripped.padStart(64, "0");
-}
-
-function encodeAmount(wei: bigint): string {
-  return "0x" + wei.toString(16).padStart(64, "0");
-}
-
-function createMockLog(
-  txHash: string,
-  blockNumber: number,
-  fromAddr: string,
-  toAddr: string,
-  amountWei: bigint,
-  contractAddr: string,
-): LogEntry {
+function ethTransfer(opts: {
+  hash: string;
+  blockNum: number;
+  value: number;
+  uniqueId?: string;
+}): AlchemyTransfer {
   return {
-    removed: false,
-    logIndex: "0x0",
-    blockNumber: toHex(blockNumber),
-    blockHash:
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    transactionHash: txHash as HexString,
-    transactionIndex: "0x0",
-    address: contractAddr.toLowerCase(),
-    data: encodeAmount(amountWei),
-    topics: [ERC20_TRANSFER_TOPIC, padAddress(fromAddr), padAddress(toAddr)],
+    blockNum: toHex(opts.blockNum),
+    hash: opts.hash as HexString,
+    from: DONOR,
+    to: TREASURY,
+    value: opts.value,
+    asset: "ETH",
+    category: "external",
+    rawContract: { address: null, decimal: null, value: null },
+    uniqueId: opts.uniqueId ?? `${opts.hash}:0`,
+    metadata: { blockTimestamp: "2026-04-27T18:00:00.000Z" },
   };
 }
 
-function createMockCampaign(
-  docId: string,
-  status: string,
-  addresses: string[],
-): PHDocument {
+function usdcTransfer(opts: {
+  hash: string;
+  blockNum: number;
+  value: number;
+  uniqueId?: string;
+}): AlchemyTransfer {
   return {
-    header: { id: docId, type: "defi-united/relief-campaign" },
-    state: {
-      global: {
-        name: "Test Campaign",
-        slug: "test-campaign",
-        status,
-        contributionAddresses: addresses.map((addr, i) => ({
-          id: `addr-${i}`,
-          address: addr,
-          chainId: 1,
-          label: null,
-        })),
-        affectedAsset: null,
-        externalLinks: [],
-        operatorWallets: [],
-        incidentDate: null,
-        riskDisclaimer: null,
-        summary: null,
-        targetAmount: null,
-        contributorRegistryDriveId: null,
-      },
-      local: {},
-    },
-    operations: { global: [], local: [] },
-    relationships: [],
-  } as unknown as PHDocument;
-}
-
-// ---------------------------------------------------------------------------
-// Mock module
-// ---------------------------------------------------------------------------
-
-function createMockModule(): IProcessorHostModule {
-  const executeMock = vi.fn().mockResolvedValue({ status: "success" });
-  return {
-    analyticsStore: {} as never,
-    relationalDb: {} as never,
-    processorApp: "connect",
-    dispatch: {
-      execute: executeMock,
-    },
-    getReadModel: () => ({}) as never,
-    config: new Map(),
+    blockNum: toHex(opts.blockNum),
+    hash: opts.hash as HexString,
+    from: DONOR,
+    to: TREASURY,
+    value: opts.value,
+    asset: "USDC",
+    category: "erc20",
+    rawContract: { address: USDC, decimal: toHex(6), value: null },
+    uniqueId: opts.uniqueId ?? `${opts.hash}:0`,
+    metadata: { blockTimestamp: "2026-04-27T18:00:00.000Z" },
   };
 }
 
-// ---------------------------------------------------------------------------
-// Mock fetch for eth-rpc
-// ---------------------------------------------------------------------------
+interface MockModule {
+  module: IProcessorHostModule;
+  dispatchExecute: ReturnType<typeof vi.fn>;
+}
 
-function createMockFetch(
-  mockBlockNumber: number,
-  mockLogs: LogEntry[],
-): typeof fetch {
-  return vi.fn((url: string, init: RequestInit) => {
-    const body = JSON.parse(typeof init.body === "string" ? init.body : "{}");
-    if (body.method === "eth_blockNumber") {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            jsonrpc: "2.0",
-            result: toHex(mockBlockNumber),
-            id: body.id,
-          }),
-      });
-    }
-    if (body.method === "eth_getLogs") {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            jsonrpc: "2.0",
-            result: mockLogs,
-            id: body.id,
-          }),
-      });
-    }
-    return Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({ jsonrpc: "2.0", result: null, id: body.id }),
+function mockModule(): MockModule {
+  const dispatchExecute = vi.fn().mockResolvedValue(undefined);
+  const module = {
+    dispatch: { execute: dispatchExecute },
+  } as unknown as IProcessorHostModule;
+  return { module, dispatchExecute };
+}
+
+function activeCampaign(state: ReturnType<typeof __testing.freshState>) {
+  state.campaigns.set(CAMPAIGN_DOC_ID, {
+    documentId: CAMPAIGN_DOC_ID,
+    isActive: true,
+    contributionAddresses: [TREASURY],
+  });
+}
+
+function configFor(
+  envUrl = "https://alchemy.test/v2/key",
+): ReturnType<typeof __testing.loadConfig> {
+  return {
+    alchemyUrl: envUrl,
+    pollIntervalMs: 12_000,
+    confirmationDepth: 6,
+    ethPriceFallbackUsd: 2200,
+    ethPriceCacheMs: 60_000,
+    chainId: 1,
+  };
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("onchain-receipt-watcher (Alchemy)", () => {
+  it("dispatches RECORD_RECEIPT for a native ETH transfer with ethEquivalent = amount", async () => {
+    const state = __testing.freshState();
+    activeCampaign(state);
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2500);
+
+    const m = mockModule();
+    await __testing.processTransfer(
+      ethTransfer({ hash: "0xa1", blockNum: 22_000_000, value: 5 }),
+      TREASURY,
+      config,
+      state,
+      m.module,
+    );
+
+    expect(m.dispatchExecute).toHaveBeenCalledTimes(1);
+    const [docId, branch, actions] = m.dispatchExecute.mock.calls[0];
+    expect(docId).toBe(CAMPAIGN_DOC_ID);
+    expect(branch).toBe("main");
+    expect(actions[0].input).toMatchObject({
+      chainId: 1,
+      txHash: "0xa1",
+      asset: { symbol: "ETH" },
+      amount: 5,
+      ethEquivalentAmount: 5,
+      ethPriceUsdAtReceipt: 2500,
     });
-  }) as unknown as typeof fetch;
-}
-
-// ---------------------------------------------------------------------------
-// Tests: eth-rpc utilities
-// ---------------------------------------------------------------------------
-
-describe("eth-rpc utilities", () => {
-  it("decodes an address from a 32-byte padded topic", () => {
-    const padded = padAddress(CONTRIBUTION_ADDR_A);
-    const decoded = decodeAddressFromTopic(padded);
-    expect(decoded).toBe(CONTRIBUTION_ADDR_A.toLowerCase());
   });
 
-  it("decodes an amount from log data", () => {
-    const amount = 1_000_000_000_000_000_000n; // 1 ETH in wei
-    const encoded = encodeAmount(amount);
-    const decoded = decodeAmountFromData(encoded);
-    expect(decoded).toBe(amount);
-  });
+  it("dispatches RECORD_RECEIPT for USDC with ethEquivalent = amount / ethPriceUsd", async () => {
+    const state = __testing.freshState();
+    activeCampaign(state);
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2000);
 
-  it("builds an ERC-20 transfer log filter", () => {
-    const filter = buildErc20TransferFilter(
-      [CONTRIBUTION_ADDR_A],
-      "0x1",
-      "0x10",
+    const m = mockModule();
+    await __testing.processTransfer(
+      usdcTransfer({ hash: "0xb2", blockNum: 22_000_001, value: 1000 }),
+      TREASURY,
+      config,
+      state,
+      m.module,
     );
-    expect(filter.fromBlock).toBe("0x1");
-    expect(filter.toBlock).toBe("0x10");
-    expect(filter.topics).toEqual([
-      ERC20_TRANSFER_TOPIC,
-      null,
-      [CONTRIBUTION_ADDR_A.toLowerCase()],
-    ]);
-  });
-});
 
-// ---------------------------------------------------------------------------
-// Tests: RPC client with mocked fetch
-// ---------------------------------------------------------------------------
-
-describe("eth-rpc client", () => {
-  const RPC_URL = "https://mock-rpc.example";
-
-  it("getBlockNumber returns the parsed block number", async () => {
-    const mockFetch = createMockFetch(12_345, []);
-    const block = await getBlockNumber(RPC_URL, mockFetch);
-    expect(block).toBe(12_345);
+    expect(m.dispatchExecute).toHaveBeenCalledTimes(1);
+    const action = m.dispatchExecute.mock.calls[0][2][0];
+    expect(action.input.asset).toEqual({
+      symbol: "USDC",
+      contractAddress: USDC,
+    });
+    expect(action.input.amount).toBe(1000);
+    expect(action.input.ethEquivalentAmount).toBeCloseTo(0.5, 6);
+    expect(action.input.ethPriceUsdAtReceipt).toBe(2000);
   });
 
-  it("getLogs returns matching logs", async () => {
-    const logs = [
-      createMockLog(
-        "0xtx1",
-        100,
-        DONOR_ADDR,
-        CONTRIBUTION_ADDR_A,
-        100n,
-        "0xtoken",
-      ),
-    ];
-    const mockFetch = createMockFetch(100, logs);
-    const result = await getLogs(
-      RPC_URL,
-      buildErc20TransferFilter([CONTRIBUTION_ADDR_A]),
-      mockFetch,
+  it("idempotency: same (txHash, uniqueId) does not double-record", async () => {
+    const state = __testing.freshState();
+    activeCampaign(state);
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2500);
+
+    const m = mockModule();
+    const transfer = ethTransfer({
+      hash: "0xc3",
+      blockNum: 22_000_002,
+      value: 1,
+    });
+    await __testing.processTransfer(
+      transfer,
+      TREASURY,
+      config,
+      state,
+      m.module,
     );
-    expect(result).toHaveLength(1);
-    expect(result[0].transactionHash).toBe("0xtx1");
-  });
-});
+    await __testing.processTransfer(
+      transfer,
+      TREASURY,
+      config,
+      state,
+      m.module,
+    );
 
-// ---------------------------------------------------------------------------
-// Tests: Processor factory
-// ---------------------------------------------------------------------------
-
-describe("buildOnchainReceiptWatcher", () => {
-  let module: IProcessorHostModule;
-
-  beforeEach(() => {
-    module = createMockModule();
-    vi.useFakeTimers();
-    vi.stubEnv("DEFI_UNITED_RPC_URL_1", "https://mock-rpc.example");
-    vi.stubEnv("BLOCK_POLL_INTERVAL_MS", "100");
-    vi.stubEnv("RECEIPT_CONFIRMATIONS", "3");
+    expect(m.dispatchExecute).toHaveBeenCalledTimes(1);
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+  it("ignores transfers to a non-tracked address (defense in depth)", async () => {
+    const state = __testing.freshState();
+    activeCampaign(state);
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2500);
+
+    const m = mockModule();
+    const wrong = {
+      ...ethTransfer({ hash: "0xd4", blockNum: 22_000_003, value: 7 }),
+      to: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    };
+    await __testing.processTransfer(wrong, TREASURY, config, state, m.module);
+
+    expect(m.dispatchExecute).not.toHaveBeenCalled();
   });
 
-  it("returns a processor record with correct filter", async () => {
-    const factory = buildOnchainReceiptWatcher(module);
-    const records = await factory({ id: "drive-1" } as never);
+  it("ignores transfers from non-whitelisted ERC-20 contracts", async () => {
+    const state = __testing.freshState();
+    activeCampaign(state);
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2500);
 
-    expect(records).toHaveLength(1);
-    const record = records[0];
-    expect(record.filter.documentType).toEqual(["defi-united/relief-campaign"]);
-    expect(record.filter.scope).toEqual(["global"]);
-    expect(record.filter.branch).toEqual(["main"]);
-    expect(record.startFrom).toBe("current");
-  });
-
-  it("onOperations triggers processing of campaign documents", async () => {
-    const factory = buildOnchainReceiptWatcher(module);
-    const records = await factory({ id: "drive-1" } as never);
-    const processor = records[0].processor;
-
-    // OperationWithContext has { operation, context } where context.resultingState
-    // is the post-operation global state as a JSON string.
-    const operation = {
-      operation: {
-        index: 1,
-        timestamp: new Date().toISOString(),
-        action: { type: "SET_CAMPAIGN_DETAILS", input: {} },
+    const m = mockModule();
+    const stranger: AlchemyTransfer = {
+      ...usdcTransfer({ hash: "0xe5", blockNum: 22_000_004, value: 1000 }),
+      rawContract: {
+        address: "0x000000000000000000000000000000000000beef",
+        decimal: toHex(18),
+        value: null,
       },
+    };
+    await __testing.processTransfer(
+      stranger,
+      TREASURY,
+      config,
+      state,
+      m.module,
+    );
+
+    expect(m.dispatchExecute).not.toHaveBeenCalled();
+  });
+
+  it("falls back to env price when Chainlink read fails", async () => {
+    const state = __testing.freshState();
+    const config = configFor();
+    vi.spyOn(ethRpc, "getEthUsdPrice").mockRejectedValue(new Error("rpc down"));
+
+    const price = await __testing.ethPrice(config, state);
+    expect(price).toBe(config.ethPriceFallbackUsd);
+  });
+
+  it("caches ETH price so we don't hammer Chainlink on every transfer", async () => {
+    const state = __testing.freshState();
+    const config = configFor();
+    const spy = vi.spyOn(ethRpc, "getEthUsdPrice").mockResolvedValue(2500);
+
+    await __testing.ethPrice(config, state);
+    await __testing.ethPrice(config, state);
+    await __testing.ethPrice(config, state);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("updateCampaignFromOperation marks ACTIVE campaigns and lowercases addresses", () => {
+    const state = __testing.freshState();
+    const config = configFor();
+    const op = {
       context: {
-        documentId: CAMPAIGN_A_ID,
-        documentType: "defi-united/relief-campaign",
-        scope: "global",
-        branch: "main",
+        documentId: CAMPAIGN_DOC_ID,
         resultingState: JSON.stringify({
-          name: "Test Campaign",
-          slug: "test-campaign",
           status: "ACTIVE",
           contributionAddresses: [
             {
-              id: "addr-0",
-              address: CONTRIBUTION_ADDR_A,
+              address: "0x0fCa5194baA59a362a835031d9C4A25970effE68",
               chainId: 1,
-              label: null,
+            },
+            {
+              address: "0xFFFF000000000000000000000000000000000001",
+              chainId: 137,
             },
           ],
-          affectedAsset: null,
-          externalLinks: [],
-          operatorWallets: [],
-          incidentDate: null,
-          riskDisclaimer: null,
-          summary: null,
-          targetAmount: null,
-          contributorRegistryDriveId: null,
         }),
-        ordinal: 1,
       },
-    } as never;
+    } as unknown as OperationWithContext;
 
-    // Polling should have been started (the internal state will try to poll)
-    await processor.onOperations([operation]);
-
-    // We can't easily test the full RPC cycle without mocking internals,
-    // but we can verify the processor was created and onOperations ran
-    expect(processor).toBeDefined();
-  });
-
-  it("onDisconnect cleans up the polling interval", async () => {
-    const factory = buildOnchainReceiptWatcher(module);
-    const records = await factory({ id: "drive-1" } as never);
-    const processor = records[0].processor;
-
-    await processor.onDisconnect();
-    // Should not throw — cleanup is idempotent
-    await processor.onDisconnect();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Idempotency
-// ---------------------------------------------------------------------------
-
-describe("idempotency", () => {
-  beforeEach(() => {
-    vi.stubEnv("DEFI_UNITED_RPC_URL_1", "https://mock-rpc.example");
-    vi.stubEnv("BLOCK_POLL_INTERVAL_MS", "100");
-    vi.stubEnv("RECEIPT_CONFIRMATIONS", "3");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
-  });
-
-  it("same txHash is only recorded once (idempotency key)", async () => {
-    // The processor maintains a Set<string> of "chainId:txHash" keys.
-    // We verify the idempotency logic by checking that a duplicate txHash
-    // with the same chainId is ignored.
-
-    const seenTxHashes = new Set<string>();
-    const chainId = 1;
-    const txHash = "0xuniqueTxHash123";
-    const key = `${chainId}:${txHash}`;
-
-    // First encounter — not seen
-    expect(seenTxHashes.has(key)).toBe(false);
-    seenTxHashes.add(key);
-
-    // Second encounter — already seen (idempotent)
-    expect(seenTxHashes.has(key)).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Confirmation depth
-// ---------------------------------------------------------------------------
-
-describe("confirmation depth", () => {
-  it("transfer with enough confirmations passes the check", () => {
-    const currentBlock = 1000;
-    const logBlock = 995;
-    const confirmations = 3;
-
-    const depth = currentBlock - logBlock; // 5
-    expect(depth >= confirmations).toBe(true);
-  });
-
-  it("transfer without enough confirmations is skipped", () => {
-    const currentBlock = 1000;
-    const logBlock = 999;
-    const confirmations = 3;
-
-    const depth = currentBlock - logBlock; // 1
-    expect(depth >= confirmations).toBe(false);
-  });
-
-  it("transfer at exactly the confirmation threshold passes", () => {
-    const currentBlock = 1000;
-    const logBlock = 997;
-    const confirmations = 3;
-
-    const depth = currentBlock - logBlock; // 3
-    expect(depth >= confirmations).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Campaign filtering
-// ---------------------------------------------------------------------------
-
-describe("campaign filtering", () => {
-  it("only ACTIVE and EXECUTING campaigns are tracked", () => {
-    const statuses = [
-      "ACTIVE",
-      "EXECUTING",
-      "DRAFT",
-      "ARCHIVED",
-      "FAILED",
-      "RESOLVED",
-    ];
-    const tracked = statuses.filter((s) => s === "ACTIVE" || s === "EXECUTING");
-    expect(tracked).toEqual(["ACTIVE", "EXECUTING"]);
-  });
-
-  it("contribution addresses are lowercased for comparison", () => {
-    const addr = "0xABCDEF1234567890ABCDEF1234567890ABCDEF12";
-    const lower = addr.toLowerCase();
-    expect(lower).toBe("0xabcdef1234567890abcdef1234567890abcdef12");
-  });
-
-  it("chainId filter only includes chain 1 addresses", () => {
-    const addresses = [
-      { address: "0xaddr1", chainId: 1 },
-      { address: "0xaddr2", chainId: 137 },
-      { address: "0xaddr3", chainId: 1 },
-    ];
-    const chain1 = addresses.filter((a) => a.chainId === 1);
-    expect(chain1).toHaveLength(2);
-    expect(chain1.map((a) => a.address)).toEqual(["0xaddr1", "0xaddr3"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Environment config
-// ---------------------------------------------------------------------------
-
-describe("environment configuration", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("uses default poll interval when env not set", () => {
-    // Default: 12000ms
-    const value = Number(undefined) || 12_000;
-    expect(value).toBe(12_000);
-  });
-
-  it("uses default confirmation depth when env not set", () => {
-    // Default: 3
-    const value = Number(undefined) || 3;
-    expect(value).toBe(3);
-  });
-
-  it("reads custom poll interval from env", () => {
-    vi.stubEnv("BLOCK_POLL_INTERVAL_MS", "5000");
-    const value = Number(process.env.BLOCK_POLL_INTERVAL_MS) || 12_000;
-    expect(value).toBe(5_000);
-  });
-
-  it("reads custom confirmation depth from env", () => {
-    vi.stubEnv("RECEIPT_CONFIRMATIONS", "12");
-    const value = Number(process.env.RECEIPT_CONFIRMATIONS) || 3;
-    expect(value).toBe(12);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: Dispatch integration
-// ---------------------------------------------------------------------------
-
-describe("dispatch integration", () => {
-  beforeEach(() => {
-    vi.stubEnv("DEFI_UNITED_RPC_URL_1", "https://mock-rpc.example");
-    vi.stubEnv("BLOCK_POLL_INTERVAL_MS", "100");
-    vi.stubEnv("RECEIPT_CONFIRMATIONS", "1");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
-  });
-
-  it("dispatch.execute is called with correct parameters when receipt is recorded", async () => {
-    const module = createMockModule();
-
-    const factory = buildOnchainReceiptWatcher(module);
-    const records = await factory({ id: "drive-1" } as never);
-
-    // The execute mock should be available for inspection
-    expect(module.dispatch.execute).toBeDefined();
-    expect(typeof module.dispatch.execute).toBe("function");
+    __testing.updateCampaignFromOperation(op, config, state.campaigns);
+    const c = state.campaigns.get(CAMPAIGN_DOC_ID)!;
+    expect(c.isActive).toBe(true);
+    expect(c.contributionAddresses).toEqual([TREASURY]);
   });
 });

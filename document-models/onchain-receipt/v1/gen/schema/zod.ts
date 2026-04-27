@@ -5,6 +5,7 @@ import type {
   AttachPledgeInput,
   ClearMatchInput,
   MarkAmbiguousInput,
+  MarkReorgedInput,
   OnchainReceiptState,
   OverrideMatchInput,
   ReceiptAsset,
@@ -30,6 +31,7 @@ export const ReconciliationStatusSchema = z.enum([
   "AMBIGUOUS",
   "MANUALLY_OVERRIDDEN",
   "MATCHED",
+  "REORGED",
   "UNMATCHED",
 ]);
 
@@ -57,6 +59,14 @@ export function MarkAmbiguousInputSchema(): z.ZodObject<
   });
 }
 
+export function MarkReorgedInputSchema(): z.ZodObject<
+  Properties<MarkReorgedInput>
+> {
+  return z.object({
+    _: z.boolean().nullish(),
+  });
+}
+
 export function OnchainReceiptStateSchema(): z.ZodObject<
   Properties<OnchainReceiptState>
 > {
@@ -67,6 +77,8 @@ export function OnchainReceiptStateSchema(): z.ZodObject<
     blockNumber: z.number().nullish(),
     blockTimestamp: z.iso.datetime().nullish(),
     chainId: z.number().nullish(),
+    ethEquivalentAmount: z.number().nullish(),
+    ethPriceUsdAtReceipt: z.number().nullish(),
     fromAddress: z
       .string()
       .regex(/^0x[a-fA-F0-9]{40}$/, {
@@ -130,6 +142,8 @@ export function RecordReceiptInputSchema(): z.ZodObject<
     blockNumber: z.number(),
     blockTimestamp: z.iso.datetime(),
     chainId: z.number(),
+    ethEquivalentAmount: z.number(),
+    ethPriceUsdAtReceipt: z.number(),
     fromAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
       message: "Invalid Ethereum address format",
     }),

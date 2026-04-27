@@ -7,6 +7,7 @@ import {
   AttachPledgeInputSchema,
   ClearMatchInputSchema,
   MarkAmbiguousInputSchema,
+  MarkReorgedInputSchema,
   OverrideMatchInputSchema,
   RecordReceiptInputSchema,
 } from "../schema/zod.js";
@@ -14,6 +15,7 @@ import type {
   AttachPledgeInput,
   ClearMatchInput,
   MarkAmbiguousInput,
+  MarkReorgedInput,
   OverrideMatchInput,
   RecordReceiptInput,
 } from "../types.js";
@@ -21,6 +23,7 @@ import type {
   AttachPledgeAction,
   ClearMatchAction,
   MarkAmbiguousAction,
+  MarkReorgedAction,
   OverrideMatchAction,
   RecordReceiptAction,
 } from "./actions.js";
@@ -67,5 +70,14 @@ export const clearMatch = (input: ClearMatchInput) =>
     { ...input },
     undefined,
     ClearMatchInputSchema,
+    "global",
+  );
+
+export const markReorged = (input: MarkReorgedInput) =>
+  createAction<MarkReorgedAction>(
+    "MARK_REORGED",
+    { ...input },
+    undefined,
+    MarkReorgedInputSchema,
     "global",
   );

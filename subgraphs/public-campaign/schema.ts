@@ -75,6 +75,11 @@ export const schema: DocumentNode = gql`
     incidentDate: String
     targetAmount: String
     totalPledged: String!
+    """
+    Sum of receipt.ethEquivalentAmount across non-REORGED on-chain
+    receipts. Document-derived audit trail; lags real chain by
+    confirmation_depth + processor poll interval.
+    """
     totalReceived: String!
     percentReceived: Float!
     pledgeCount: Int!
@@ -84,10 +89,59 @@ export const schema: DocumentNode = gql`
     contributorsPublic: [DefiUnited_PublicPledge!]!
     dependenciesPublic: [DefiUnited_PublicDependency!]!
     recentUpdates: [DefiUnited_PublicStatusUpdate!]!
+    """
+    Most recent on-chain transfer receipts, newest first.
+    """
+    recentReceipts(limit: Int = 20): [DefiUnited_PublicReceiptEntry!]!
+    """
+    Live on-chain balance overlay. Snapshot of native ETH + the accepted
+    stablecoin balances of the campaign's first treasury, expressed in
+    ETH-equivalent. Null if the RPC fetch failed or no Alchemy URL is
+    configured. Cached server-side ~5s.
+    """
+    onchainLiveBalance: DefiUnited_OnchainLiveBalance
+    """
+    max(0, onchainLiveBalance.totalEthEquivalent - totalReceived). The
+    portion of treasury inflows the on-chain layer can see but which
+    haven't been recorded as receipt documents yet — used for the live
+    "X.XX ETH inbound" pill on the frontend.
+    """
+    pendingReceiptsEthEquivalent: String
     riskDisclaimer: String
     externalLinks: [DefiUnited_PublicExternalLink!]!
     affectedAsset: DefiUnited_PublicAffectedAsset
     lastUpdateAt: String
+  }
+
+  type DefiUnited_OnchainLiveBalance {
+    totalEthEquivalent: String!
+    perAsset: [DefiUnited_OnchainAssetBalance!]!
+    fetchedAt: String!
+    ethPriceUsd: Float!
+  }
+
+  type DefiUnited_OnchainAssetBalance {
+    symbol: String!
+    contractAddress: String
+    rawBalance: String!
+    formattedAmount: String!
+    ethEquivalent: String!
+  }
+
+  type DefiUnited_PublicReceiptEntry {
+    id: String!
+    txHash: String!
+    blockNumber: Int!
+    blockTimestamp: String!
+    fromAddress: String!
+    toAddress: String!
+    assetSymbol: String!
+    assetContractAddress: String
+    amount: String!
+    ethEquivalentAmount: String!
+    ethPriceUsdAtReceipt: Float!
+    reconciliationStatus: String!
+    matchedPledgeId: String
   }
 
   type DefiUnited_PublicAffectedAsset {

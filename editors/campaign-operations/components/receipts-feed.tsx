@@ -27,6 +27,7 @@ const RECON_COLORS: Record<ReconciliationStatus, { bg: string; fg: string }> = {
   MATCHED: { bg: "#e2f1ea", fg: "#1a7048" },
   AMBIGUOUS: { bg: "#fbe2e2", fg: "#a4191a" },
   MANUALLY_OVERRIDDEN: { bg: "#e2eefb", fg: "#1a4dd6" },
+  REORGED: { bg: "#f1e2fb", fg: "#5a1a7d" },
 };
 
 function selectNode(nodeId: string) {

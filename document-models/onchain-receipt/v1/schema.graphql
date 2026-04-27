@@ -28,6 +28,8 @@ type OnchainReceiptState {
     toAddress: EthereumAddress
     asset: ReceiptAsset
     amount: Amount_Tokens
+    ethEquivalentAmount: Amount_Tokens
+    ethPriceUsdAtReceipt: Float
     matchedPledgeId: PHID
     reconciliationStatus: ReconciliationStatus!
     rawLog: String
@@ -38,6 +40,7 @@ enum ReconciliationStatus {
     MATCHED
     AMBIGUOUS
     MANUALLY_OVERRIDDEN
+    REORGED
 }
 
 type ReceiptAsset {
@@ -61,6 +64,8 @@ input RecordReceiptInput {
     toAddress: EthereumAddress!
     asset: ReceiptAssetInput!
     amount: Amount_Tokens!
+    ethEquivalentAmount: Amount_Tokens!
+    ethPriceUsdAtReceipt: Float!
     rawLog: String
 }
 
@@ -77,5 +82,9 @@ input OverrideMatchInput {
 }
 
 input ClearMatchInput {
+    _: Boolean
+}
+
+input MarkReorgedInput {
     _: Boolean
 }

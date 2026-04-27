@@ -71,12 +71,18 @@ export type MarkAmbiguousInput = {
   _?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
+export type MarkReorgedInput = {
+  _?: InputMaybe<Scalars["Boolean"]["input"]>;
+};
+
 export type OnchainReceiptState = {
   amount: Maybe<Scalars["Amount_Tokens"]["output"]>;
   asset: Maybe<ReceiptAsset>;
   blockNumber: Maybe<Scalars["Int"]["output"]>;
   blockTimestamp: Maybe<Scalars["DateTime"]["output"]>;
   chainId: Maybe<Scalars["Int"]["output"]>;
+  ethEquivalentAmount: Maybe<Scalars["Amount_Tokens"]["output"]>;
+  ethPriceUsdAtReceipt: Maybe<Scalars["Float"]["output"]>;
   fromAddress: Maybe<Scalars["EthereumAddress"]["output"]>;
   matchedPledgeId: Maybe<Scalars["PHID"]["output"]>;
   rawLog: Maybe<Scalars["String"]["output"]>;
@@ -103,6 +109,7 @@ export type ReconciliationStatus =
   | "AMBIGUOUS"
   | "MANUALLY_OVERRIDDEN"
   | "MATCHED"
+  | "REORGED"
   | "UNMATCHED";
 
 export type RecordReceiptInput = {
@@ -111,6 +118,8 @@ export type RecordReceiptInput = {
   blockNumber: Scalars["Int"]["input"];
   blockTimestamp: Scalars["DateTime"]["input"];
   chainId: Scalars["Int"]["input"];
+  ethEquivalentAmount: Scalars["Amount_Tokens"]["input"];
+  ethPriceUsdAtReceipt: Scalars["Float"]["input"];
   fromAddress: Scalars["EthereumAddress"]["input"];
   rawLog?: InputMaybe<Scalars["String"]["input"]>;
   toAddress: Scalars["EthereumAddress"]["input"];

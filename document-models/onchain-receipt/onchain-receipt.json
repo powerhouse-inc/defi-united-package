@@ -1,100 +1,114 @@
 {
-  "id": "defi-united/onchain-receipt",
-  "name": "OnchainReceipt",
   "author": {
     "name": "Powerhouse",
     "website": "https://powerhouse.inc"
   },
-  "extension": ".rcpt",
   "description": "An on-chain transfer to a campaign contribution address. Created by the receipt-watcher processor and reconciled to a pledge.",
+  "extension": ".rcpt",
+  "id": "defi-united/onchain-receipt",
+  "name": "OnchainReceipt",
   "specifications": [
     {
-      "state": {
-        "local": {
-          "schema": "",
-          "examples": [],
-          "initialValue": ""
-        },
-        "global": {
-          "schema": "type OnchainReceiptState {\n    chainId: Int\n    txHash: String\n    blockNumber: Int\n    blockTimestamp: DateTime\n    fromAddress: EthereumAddress\n    toAddress: EthereumAddress\n    asset: ReceiptAsset\n    amount: Amount_Tokens\n    matchedPledgeId: PHID\n    reconciliationStatus: ReconciliationStatus!\n    rawLog: String\n}\n\nenum ReconciliationStatus {\n    UNMATCHED\n    MATCHED\n    AMBIGUOUS\n    MANUALLY_OVERRIDDEN\n}\n\ntype ReceiptAsset {\n    symbol: String!\n    contractAddress: EthereumAddress\n}",
-          "examples": [],
-          "initialValue": "{\n  \"chainId\": null,\n  \"txHash\": null,\n  \"blockNumber\": null,\n  \"blockTimestamp\": null,\n  \"fromAddress\": null,\n  \"toAddress\": null,\n  \"asset\": null,\n  \"amount\": null,\n  \"matchedPledgeId\": null,\n  \"reconciliationStatus\": \"UNMATCHED\",\n  \"rawLog\": null\n}"
-        }
-      },
+      "changeLog": [
+        "Add ethEquivalentAmount + ethPriceUsdAtReceipt for ETH-denominated rollups",
+        "Add MARK_REORGED action + REORGED reconciliation status"
+      ],
       "modules": [
         {
+          "description": "Receipt recording and pledge reconciliation",
           "id": "or-recon",
           "name": "reconciliation",
-          "description": "Receipt recording and pledge reconciliation",
           "operations": [
             {
-              "id": "op-or-record",
-              "name": "RECORD_RECEIPT",
               "description": "Record an on-chain transfer to a campaign address",
-              "schema": "input ReceiptAssetInput {\n    symbol: String!\n    contractAddress: EthereumAddress\n}\n\ninput RecordReceiptInput {\n    chainId: Int!\n    txHash: String!\n    blockNumber: Int!\n    blockTimestamp: DateTime!\n    fromAddress: EthereumAddress!\n    toAddress: EthereumAddress!\n    asset: ReceiptAssetInput!\n    amount: Amount_Tokens!\n    rawLog: String\n}",
-              "template": "Record an on-chain transfer to a campaign address",
-              "reducer": "if (state.txHash) throw new ReceiptAlreadyRecordedError('Receipt has already been recorded');\nstate.chainId = action.input.chainId;\nstate.txHash = action.input.txHash;\nstate.blockNumber = action.input.blockNumber;\nstate.blockTimestamp = action.input.blockTimestamp;\nstate.fromAddress = action.input.fromAddress;\nstate.toAddress = action.input.toAddress;\nstate.asset = {\n  symbol: action.input.asset.symbol,\n  contractAddress: action.input.asset.contractAddress ?? null,\n};\nstate.amount = action.input.amount;\nif (action.input.rawLog) state.rawLog = action.input.rawLog;",
               "errors": [
                 {
-                  "id": "err-or-already-recorded",
-                  "name": "ReceiptAlreadyRecordedError",
                   "code": "RECEIPT_ALREADY_RECORDED",
                   "description": "RECORD_RECEIPT has already been called on this document",
+                  "id": "err-or-already-recorded",
+                  "name": "ReceiptAlreadyRecordedError",
                   "template": ""
                 }
               ],
               "examples": [],
+              "id": "op-or-record",
+              "name": "RECORD_RECEIPT",
+              "reducer": "if (state.txHash) throw new ReceiptAlreadyRecordedError('Receipt has already been recorded');\nstate.chainId = action.input.chainId;\nstate.txHash = action.input.txHash;\nstate.blockNumber = action.input.blockNumber;\nstate.blockTimestamp = action.input.blockTimestamp;\nstate.fromAddress = action.input.fromAddress;\nstate.toAddress = action.input.toAddress;\nstate.asset = {\n  symbol: action.input.asset.symbol,\n  contractAddress: action.input.asset.contractAddress ?? null,\n};\nstate.amount = action.input.amount;\nstate.ethEquivalentAmount = action.input.ethEquivalentAmount;\nstate.ethPriceUsdAtReceipt = action.input.ethPriceUsdAtReceipt;\nif (action.input.rawLog) state.rawLog = action.input.rawLog;",
+              "schema": "input ReceiptAssetInput {\n    symbol: String!\n    contractAddress: EthereumAddress\n}\n\ninput RecordReceiptInput {\n    chainId: Int!\n    txHash: String!\n    blockNumber: Int!\n    blockTimestamp: DateTime!\n    fromAddress: EthereumAddress!\n    toAddress: EthereumAddress!\n    asset: ReceiptAssetInput!\n    amount: Amount_Tokens!\n    ethEquivalentAmount: Amount_Tokens!\n    ethPriceUsdAtReceipt: Float!\n    rawLog: String\n}",
+              "template": "Record an on-chain transfer to a campaign address",
               "scope": "global"
             },
             {
+              "description": "Mark this receipt as fulfilling a specific pledge",
+              "errors": [],
+              "examples": [],
               "id": "op-or-attach",
               "name": "ATTACH_PLEDGE",
-              "description": "Mark this receipt as fulfilling a specific pledge",
+              "reducer": "state.matchedPledgeId = action.input.pledgeId;\nstate.reconciliationStatus = 'MATCHED';",
               "schema": "input AttachPledgeInput {\n    pledgeId: PHID!\n}",
               "template": "Mark this receipt as fulfilling a specific pledge",
-              "reducer": "state.matchedPledgeId = action.input.pledgeId;\nstate.reconciliationStatus = 'MATCHED';",
-              "errors": [],
-              "examples": [],
               "scope": "global"
             },
             {
+              "description": "Multiple candidate pledges — needs manual override",
+              "errors": [],
+              "examples": [],
               "id": "op-or-ambiguous",
               "name": "MARK_AMBIGUOUS",
-              "description": "Multiple candidate pledges — needs manual override",
+              "reducer": "state.reconciliationStatus = 'AMBIGUOUS';",
               "schema": "input MarkAmbiguousInput {\n    _: Boolean\n}",
               "template": "Multiple candidate pledges — needs manual override",
-              "reducer": "state.reconciliationStatus = 'AMBIGUOUS';",
-              "errors": [],
-              "examples": [],
               "scope": "global"
             },
             {
+              "description": "Manually attach this receipt to a pledge (operator override)",
+              "errors": [],
+              "examples": [],
               "id": "op-or-override",
               "name": "OVERRIDE_MATCH",
-              "description": "Manually attach this receipt to a pledge (operator override)",
+              "reducer": "state.matchedPledgeId = action.input.pledgeId;\nstate.reconciliationStatus = 'MANUALLY_OVERRIDDEN';",
               "schema": "input OverrideMatchInput {\n    pledgeId: PHID!\n}",
               "template": "Manually attach this receipt to a pledge (operator override)",
-              "reducer": "state.matchedPledgeId = action.input.pledgeId;\nstate.reconciliationStatus = 'MANUALLY_OVERRIDDEN';",
-              "errors": [],
-              "examples": [],
               "scope": "global"
             },
             {
-              "id": "op-or-clear",
-              "name": "CLEAR_MATCH",
               "description": "Clear any matched pledge and reset to UNMATCHED",
-              "schema": "input ClearMatchInput {\n    _: Boolean\n}",
-              "template": "Clear any matched pledge and reset to UNMATCHED",
-              "reducer": "state.matchedPledgeId = null;\nstate.reconciliationStatus = 'UNMATCHED';",
               "errors": [],
               "examples": [],
+              "id": "op-or-clear",
+              "name": "CLEAR_MATCH",
+              "reducer": "state.matchedPledgeId = null;\nstate.reconciliationStatus = 'UNMATCHED';",
+              "schema": "input ClearMatchInput {\n    _: Boolean\n}",
+              "template": "Clear any matched pledge and reset to UNMATCHED",
+              "scope": "global"
+            },
+            {
+              "description": "Mark this receipt as reorged out of the canonical chain. Excluded from totals.",
+              "errors": [],
+              "examples": [],
+              "id": "op-or-reorged",
+              "name": "MARK_REORGED",
+              "reducer": "state.reconciliationStatus = 'REORGED';",
+              "schema": "input MarkReorgedInput {\n    _: Boolean\n}",
+              "template": "Mark this receipt as reorged out of the canonical chain",
               "scope": "global"
             }
           ]
         }
       ],
-      "version": 1,
-      "changeLog": []
+      "state": {
+        "global": {
+          "examples": [],
+          "initialValue": "{\n  \"chainId\": null,\n  \"txHash\": null,\n  \"blockNumber\": null,\n  \"blockTimestamp\": null,\n  \"fromAddress\": null,\n  \"toAddress\": null,\n  \"asset\": null,\n  \"amount\": null,\n  \"ethEquivalentAmount\": null,\n  \"ethPriceUsdAtReceipt\": null,\n  \"matchedPledgeId\": null,\n  \"reconciliationStatus\": \"UNMATCHED\",\n  \"rawLog\": null\n}",
+          "schema": "type OnchainReceiptState {\n    chainId: Int\n    txHash: String\n    blockNumber: Int\n    blockTimestamp: DateTime\n    fromAddress: EthereumAddress\n    toAddress: EthereumAddress\n    asset: ReceiptAsset\n    amount: Amount_Tokens\n    ethEquivalentAmount: Amount_Tokens\n    ethPriceUsdAtReceipt: Float\n    matchedPledgeId: PHID\n    reconciliationStatus: ReconciliationStatus!\n    rawLog: String\n}\n\nenum ReconciliationStatus {\n    UNMATCHED\n    MATCHED\n    AMBIGUOUS\n    MANUALLY_OVERRIDDEN\n    REORGED\n}\n\ntype ReceiptAsset {\n    symbol: String!\n    contractAddress: EthereumAddress\n}"
+        },
+        "local": {
+          "examples": [],
+          "initialValue": "",
+          "schema": ""
+        }
+      },
+      "version": 1
     }
   ]
 }

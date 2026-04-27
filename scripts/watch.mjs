@@ -7,20 +7,20 @@
  *
  * Usage:  pnpm vetra:watch
  */
-import { spawn } from 'node:child_process';
-import { watch } from 'node:fs';
-import { join } from 'node:path';
+import { spawn } from "node:child_process";
+import { watch } from "node:fs";
+import { join } from "node:path";
 
 const ROOT = process.cwd();
 const WATCH_DIRS = [
-  'editors',
-  'document-models',
-  'subgraphs',
-  'processors',
-  'index.ts',
-  'main.tsx',
-  'powerhouse.manifest.json',
-  'powerhouse.config.json',
+  "editors",
+  "document-models",
+  "subgraphs",
+  "processors",
+  "index.ts",
+  "main.tsx",
+  "powerhouse.manifest.json",
+  "powerhouse.config.json",
 ];
 const IGNORE = /(\bgen\b|\bnode_modules\b|\bdist\b|\.d\.ts$|\.d\.ts\.map$)/;
 const DEBOUNCE_MS = 600;
@@ -35,15 +35,17 @@ function runBuild() {
     return;
   }
   console.log(`\n🔨 ${new Date().toLocaleTimeString()} — rebuilding…`);
-  runningProc = spawn('pnpm', ['build'], {
-    stdio: 'inherit',
+  runningProc = spawn("pnpm", ["build"], {
+    stdio: "inherit",
     cwd: ROOT,
     shell: false,
   });
-  runningProc.on('close', (code) => {
+  runningProc.on("close", (code) => {
     runningProc = null;
     if (code !== 0) {
-      console.log(`\n❌ build failed (exit ${code}). Watching for next change…`);
+      console.log(
+        `\n❌ build failed (exit ${code}). Watching for next change…`,
+      );
     } else {
       console.log(
         `✅ ${new Date().toLocaleTimeString()} — bundle updated. Hard-reload Vetra Studio (http://localhost:3001) to pick it up.`,
@@ -67,16 +69,20 @@ function schedule(reason) {
 
 function attach(target) {
   try {
-    watch(join(ROOT, target), { recursive: true, persistent: true }, (event, filename) => {
-      if (!filename) return;
-      const path = `${target}/${filename}`;
-      if (IGNORE.test(path)) return;
-      if (!/\.(ts|tsx|js|jsx|graphql|gql|json|css)$/.test(filename)) return;
-      schedule(path);
-    });
+    watch(
+      join(ROOT, target),
+      { recursive: true, persistent: true },
+      (event, filename) => {
+        if (!filename) return;
+        const path = `${target}/${filename}`;
+        if (IGNORE.test(path)) return;
+        if (!/\.(ts|tsx|js|jsx|graphql|gql|json|css)$/.test(filename)) return;
+        schedule(path);
+      },
+    );
     console.log(`👀 watching ${target}/`);
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    if (err.code === "ENOENT") {
       console.log(`(skipping ${target} — not present)`);
     } else {
       throw err;
@@ -90,8 +96,8 @@ for (const dir of WATCH_DIRS) attach(dir);
 // One initial build so the bundle is current right away.
 runBuild();
 
-process.on('SIGINT', () => {
-  console.log('\n👋 Stopping watcher.');
-  if (runningProc) runningProc.kill('SIGINT');
+process.on("SIGINT", () => {
+  console.log("\n👋 Stopping watcher.");
+  if (runningProc) runningProc.kill("SIGINT");
   process.exit(0);
 });

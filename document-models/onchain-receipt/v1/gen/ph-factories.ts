@@ -23,6 +23,8 @@ export function defaultGlobalState(): OnchainReceiptGlobalState {
     toAddress: null,
     asset: null,
     amount: null,
+    ethEquivalentAmount: null,
+    ethPriceUsdAtReceipt: null,
     matchedPledgeId: null,
     reconciliationStatus: "UNMATCHED",
     rawLog: null,

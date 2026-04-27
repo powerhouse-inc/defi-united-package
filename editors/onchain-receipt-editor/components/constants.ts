@@ -24,6 +24,11 @@ export const STATUS_BADGE: Record<
     fg: "text-sky-700",
     ring: "ring-sky-200",
   },
+  REORGED: {
+    bg: "bg-purple-50",
+    fg: "text-purple-700",
+    ring: "ring-purple-200",
+  },
 };
 
 export const STATUS_LABEL: Record<ReconciliationStatus, string> = {
@@ -31,6 +36,7 @@ export const STATUS_LABEL: Record<ReconciliationStatus, string> = {
   MATCHED: "Matched",
   AMBIGUOUS: "Ambiguous",
   MANUALLY_OVERRIDDEN: "Manually overridden",
+  REORGED: "Reorged",
 };
 
 /** Truncate an address-like string to a short form. */

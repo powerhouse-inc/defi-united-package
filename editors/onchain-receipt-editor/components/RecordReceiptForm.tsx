@@ -66,6 +66,15 @@ export function RecordReceiptForm({ onSubmit }: Props) {
 
     const timestampISO = new Date(form.blockTimestamp).toISOString();
 
+    // Manual entry from the editor: assume ETH-symbol → 1.0 ETH equivalent,
+    // stables → divided by a default price (no oracle access in the editor).
+    // For a precise valuation, mark the receipt and rely on the processor.
+    const isStable = ["USDC", "USDT", "DAI"].includes(
+      form.assetSymbol.trim().toUpperCase(),
+    );
+    const defaultEthPriceUsd = 2200;
+    const ethEquivalentAmount = isStable ? amount / defaultEthPriceUsd : amount;
+
     onSubmit({
       chainId,
       txHash: form.txHash.trim(),
@@ -78,6 +87,8 @@ export function RecordReceiptForm({ onSubmit }: Props) {
         contractAddress: form.contractAddress.trim() || null,
       },
       amount,
+      ethEquivalentAmount,
+      ethPriceUsdAtReceipt: defaultEthPriceUsd,
       rawLog: form.rawLog.trim() || null,
     });
   }

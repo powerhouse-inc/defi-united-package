@@ -1,274 +1,243 @@
 /**
- * Minimal Ethereum JSON-RPC client for the onchain receipt watcher processor.
+ * Minimal Ethereum + Alchemy RPC client for the onchain receipt watcher.
  *
- * Pure functions with injectable fetch for testability.
+ * The processor uses a single Alchemy URL to poll inbound transfers
+ * (`alchemy_getAssetTransfers`), read the latest block, and read the
+ * Chainlink ETH/USD price feed for ETH-equivalent valuation.
+ *
+ * All helpers are pure async functions with an injectable fetch — kept
+ * thin enough to test against `vi.fn()` mocks without a Node ethereum lib.
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  method: string;
-  params: unknown[];
-  id: number;
-}
-
-export interface JsonRpcResponse<T = unknown> {
-  jsonrpc: "2.0";
-  result: T;
-  id: number;
-}
-
-interface JsonRpcError {
-  jsonrpc: "2.0";
-  error: { code: number; message: string };
-  id: number;
-}
-
 export type HexString = `0x${string}`;
 
-// ---------------------------------------------------------------------------
-// Log filter and result
-// ---------------------------------------------------------------------------
-
-export interface LogFilter {
-  fromBlock?: HexString;
-  toBlock?: HexString;
-  address?: string | string[];
-  topics?: (string | string[] | null)[];
+interface JsonRpcResponse<T> {
+  jsonrpc: "2.0";
+  result?: T;
+  error?: { code: number; message: string };
+  id: number;
 }
-
-export interface LogEntry {
-  removed: boolean;
-  logIndex: HexString | null;
-  blockNumber: HexString;
-  blockHash: HexString;
-  transactionHash: HexString;
-  transactionIndex: HexString;
-  address: string;
-  data: string;
-  topics: string[];
-}
-
-// ---------------------------------------------------------------------------
-// ERC-20 Transfer event signature (keccak256("Transfer(address,address,uint256)"))
-// ---------------------------------------------------------------------------
-
-export const ERC20_TRANSFER_TOPIC =
-  "0xddf252ad1be2c39cd7d266fd2622460c69cb6b94cb67463a88a8c6576067b4a2";
-
-// ---------------------------------------------------------------------------
-// Core RPC functions
-// ---------------------------------------------------------------------------
 
 const DEFAULT_RPC_TIMEOUT_MS = 10_000;
+let _requestId = 0;
+
+class EthRpcError extends Error {
+  constructor(
+    message: string,
+    public code: number,
+    public method: string,
+  ) {
+    super(`${method} failed (${code}): ${message}`);
+  }
+}
 
 async function jsonRpc<T>(
   url: string,
   method: string,
   params: unknown[],
   fetchFn: typeof fetch,
-  requestId: number,
 ): Promise<T> {
-  const request: JsonRpcRequest = {
-    jsonrpc: "2.0",
-    method,
-    params,
-    id: requestId,
-  };
-
   const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    DEFAULT_RPC_TIMEOUT_MS,
-  );
-
+  const timer = setTimeout(() => controller.abort(), DEFAULT_RPC_TIMEOUT_MS);
   try {
-    const response = await fetchFn(url, {
+    const res = await fetchFn(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
       signal: controller.signal,
-    });
-
-    const body = (await response.json()) as JsonRpcResponse<T> | JsonRpcError;
-
-    if ("error" in body) {
-      throw new EthRpcError(
-        body.error.message,
-        body.error.code,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
         method,
         params,
-      );
+        id: ++_requestId,
+      }),
+    });
+    const body = (await res.json()) as JsonRpcResponse<T>;
+    if (body.error) {
+      throw new EthRpcError(body.error.message, body.error.code, method);
     }
-
+    if (body.result === undefined) {
+      throw new EthRpcError("missing result", -1, method);
+    }
     return body.result;
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timer);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Block tip
 // ---------------------------------------------------------------------------
 
-let _requestId = 0;
-
-/**
- * Fetch matching logs via eth_getLogs.
- */
-export function getLogs(
-  url: string,
-  filter: LogFilter,
-  fetchFn: typeof fetch = fetch,
-): Promise<LogEntry[]> {
-  return jsonRpc<LogEntry[]>(
-    url,
-    "eth_getLogs",
-    [filter],
-    fetchFn,
-    _requestId++,
-  );
-}
-
-/**
- * Fetch the latest block number via eth_blockNumber.
- * Returns the block number as a decimal integer.
- */
-export function getBlockNumber(
+export async function getBlockNumber(
   url: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<number> {
-  return jsonRpc<HexString>(
-    url,
-    "eth_blockNumber",
-    [],
-    fetchFn,
-    _requestId++,
-  ).then((hex) => parseInt(hex, 16));
+  const hex = await jsonRpc<HexString>(url, "eth_blockNumber", [], fetchFn);
+  return parseInt(hex, 16);
 }
 
+// ---------------------------------------------------------------------------
+// alchemy_getAssetTransfers
+// ---------------------------------------------------------------------------
+
 /**
- * Build a log filter for ERC-20 Transfer events where `to` matches one of the
- * given contribution addresses.
- *
- * Topics:
- *   [0] = keccak256("Transfer(address,address,uint256)")
- *   [1] = from (indexed) - not filtered
- *   [2] = to   (indexed) - we match specific addresses
+ * One asset transfer as returned by Alchemy's enhanced API.
+ * The shape we care about — full schema is larger.
  */
-export function buildErc20TransferFilter(
-  addresses: string[],
-  fromBlock?: HexString,
-  toBlock?: HexString,
-): LogFilter {
-  const topicValues = addresses.map((a) => a.toLowerCase());
-  return {
-    fromBlock,
-    toBlock,
-    topics: [ERC20_TRANSFER_TOPIC, null, topicValues],
+export interface AlchemyTransfer {
+  blockNum: HexString;
+  hash: HexString;
+  from: string;
+  to: string;
+  value: number | null;
+  asset: string | null;
+  category: "external" | "internal" | "erc20" | "erc721" | "erc1155";
+  rawContract: {
+    address: string | null;
+    decimal: HexString | null;
+    value: HexString | null;
+  };
+  uniqueId?: string;
+  metadata?: {
+    blockTimestamp?: string;
   };
 }
 
-// ---------------------------------------------------------------------------
-// Native ETH transfer detection
-// ---------------------------------------------------------------------------
-
-/**
- * Build a log filter that captures all transactions (native transfers produce
- * no log topics, but we can scan blocks for tx receipts — this filter returns
- * an empty-topic filter to get all receipts in a range).
- *
- * NOTE: eth_getLogs with no topics matches ALL logs. For native ETH transfers
- * we instead query block receipts via eth_getTransactionReceipt. This function
- * exists for documentation; the actual native-ETH scanning is done via
- * `getTransactionReceiptsInRange`.
- */
-export function buildNativeTransferFilter(
-  _addresses: string[],
-  fromBlock?: HexString,
-  toBlock?: HexString,
-): LogFilter {
-  // We cannot filter native ETH transfers via eth_getLogs.
-  // Return a filter that matches all logs; callers should use getTransactionReceiptsInRange instead.
-  return { fromBlock, toBlock };
+interface AlchemyAssetTransfersResponse {
+  transfers: AlchemyTransfer[];
+  pageKey?: string;
 }
 
-export interface TransactionReceipt {
-  transactionHash: HexString;
-  blockNumber: HexString;
-  from: string;
-  to: string | null;
-  gasUsed: HexString;
-  cumulativeGasUsed: HexString;
-  logs: LogEntry[];
+export interface GetAssetTransfersOptions {
+  fromBlock: HexString;
+  toBlock: HexString;
+  toAddress: string;
+  category: ("external" | "internal" | "erc20")[];
+  contractAddresses?: string[];
+  /** Maximum 1000 per page; we default to 100. */
+  maxCount?: number;
+  pageKey?: string;
 }
 
-/**
- * Fetch a single transaction receipt via eth_getTransactionReceipt.
- * Returns null if the transaction is not yet known.
- */
-export function getTransactionReceipt(
+export async function getAssetTransfers(
   url: string,
-  txHash: HexString,
+  opts: GetAssetTransfersOptions,
   fetchFn: typeof fetch = fetch,
-): Promise<TransactionReceipt | null> {
-  return jsonRpc<TransactionReceipt | null>(
+): Promise<AlchemyAssetTransfersResponse> {
+  const params: Record<string, unknown> = {
+    fromBlock: opts.fromBlock,
+    toBlock: opts.toBlock,
+    toAddress: opts.toAddress.toLowerCase(),
+    category: opts.category,
+    withMetadata: true,
+    excludeZeroValue: true,
+    maxCount: toHex(opts.maxCount ?? 100),
+    order: "asc",
+  };
+  if (opts.contractAddresses && opts.contractAddresses.length > 0) {
+    params.contractAddresses = opts.contractAddresses.map((a) =>
+      a.toLowerCase(),
+    );
+  }
+  if (opts.pageKey) {
+    params.pageKey = opts.pageKey;
+  }
+  return jsonRpc<AlchemyAssetTransfersResponse>(
     url,
-    "eth_getTransactionReceipt",
-    [txHash],
+    "alchemy_getAssetTransfers",
+    [params],
     fetchFn,
-    _requestId++,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Chainlink ETH/USD price feed
+// ---------------------------------------------------------------------------
+
+/**
+ * Mainnet ETH/USD aggregator. Returns price with 8 decimals via
+ * `latestAnswer()` (selector 0x50d25bcd).
+ */
+export const CHAINLINK_ETH_USD_FEED =
+  "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
+
+const LATEST_ANSWER_SELECTOR = "0x50d25bcd";
+
+export async function getEthUsdPrice(
+  url: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<number> {
+  const result = await jsonRpc<HexString>(
+    url,
+    "eth_call",
+    [{ to: CHAINLINK_ETH_USD_FEED, data: LATEST_ANSWER_SELECTOR }, "latest"],
+    fetchFn,
+  );
+  // 8-decimal feed; clean to a plain Number.
+  const raw = BigInt(result);
+  return Number(raw) / 1e8;
+}
+
+// ---------------------------------------------------------------------------
+// Native + ERC-20 balance reads (used by the subgraph live overlay path)
+// ---------------------------------------------------------------------------
+
+const ERC20_BALANCE_OF_SELECTOR = "0x70a08231";
+
+export async function getEthBalance(
+  url: string,
+  holder: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<bigint> {
+  const result = await jsonRpc<HexString>(
+    url,
+    "eth_getBalance",
+    [holder.toLowerCase(), "latest"],
+    fetchFn,
+  );
+  return BigInt(result);
+}
+
+export async function getErc20Balance(
+  url: string,
+  contract: string,
+  holder: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<bigint> {
+  const data = (ERC20_BALANCE_OF_SELECTOR +
+    holder.replace(/^0x/, "").toLowerCase().padStart(64, "0")) as HexString;
+  const result = await jsonRpc<HexString>(
+    url,
+    "eth_call",
+    [{ to: contract, data }, "latest"],
+    fetchFn,
+  );
+  return BigInt(result);
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Decode the `to` address from an ERC-20 Transfer log topic[2].
- * Topics are 32-byte padded, so we take the last 20 bytes (40 hex chars).
- */
-export function decodeAddressFromTopic(topic: string): string {
-  const padded = topic.slice(-40).padStart(40, "0");
-  return `0x${padded}`.toLowerCase();
+export function toHex(n: number): HexString {
+  return `0x${n.toString(16)}`;
 }
 
 /**
- * Decode the transfer amount from the `data` field of an ERC-20 Transfer log.
+ * Convert a raw bigint base-units value into a decimal-token Number,
+ * preserving up to ~15 significant digits which is plenty for ETH-scale
+ * amounts but safe to assume only when we already filter by accepted
+ * tokens with known decimals.
  */
-export function decodeAmountFromData(data: string): bigint {
-  // data is 0x-prefixed, 64 hex chars for uint256
-  const hex = data.startsWith("0x") ? data.slice(2) : data;
-  return BigInt("0x" + hex);
-}
-
-/**
- * Format a bigint wei value as a human-readable string with the given decimals.
- */
-export function formatTokenAmount(value: bigint, decimals: number): string {
-  const divisor = 10n ** BigInt(decimals);
-  const whole = value / divisor;
-  const fractional = value % divisor;
-  const fracStr = fractional.toString().padStart(decimals, "0");
-  return `${whole}.${fracStr}`;
-}
-
-// ---------------------------------------------------------------------------
-// Error class
-// ---------------------------------------------------------------------------
-
-export class EthRpcError extends Error {
-  constructor(
-    message: string,
-    public readonly code: number,
-    public readonly method: string,
-    public readonly params: unknown[],
-  ) {
-    super(`ETH RPC error (${method}): ${message}`);
-    this.name = "EthRpcError";
-  }
+export function rawToTokenUnits(raw: bigint, decimals: number): number {
+  if (decimals === 0) return Number(raw);
+  const base = 10n ** BigInt(decimals);
+  const whole = raw / base;
+  const frac = raw % base;
+  const fracStr = frac.toString().padStart(decimals, "0");
+  return Number(`${whole}.${fracStr}`);
 }

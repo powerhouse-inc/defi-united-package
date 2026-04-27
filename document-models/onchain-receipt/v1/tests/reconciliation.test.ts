@@ -3,6 +3,7 @@ import {
   clearMatch,
   isOnchainReceiptDocument,
   markAmbiguous,
+  markReorged,
   overrideMatch,
   recordReceipt,
   reducer,
@@ -26,6 +27,8 @@ const recordEth = () =>
     toAddress: TO,
     asset: { symbol: "ETH" },
     amount: 5000,
+    ethEquivalentAmount: 5000,
+    ethPriceUsdAtReceipt: 2200,
   });
 
 describe("OnchainReceipt reconciliation reducer", () => {
@@ -107,11 +110,29 @@ describe("OnchainReceipt reconciliation reducer", () => {
           symbol: "USDC",
           contractAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         },
-        amount: 1000000,
+        amount: 1000,
+        ethEquivalentAmount: 0.4545,
+        ethPriceUsdAtReceipt: 2200,
       }),
     );
     expect(next.state.global.asset?.contractAddress).toBe(
       "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     );
+    expect(next.state.global.ethEquivalentAmount).toBe(0.4545);
+    expect(next.state.global.ethPriceUsdAtReceipt).toBe(2200);
+  });
+
+  it("RECORD_RECEIPT pins ethEquivalentAmount + price for ETH-denominated rollups", () => {
+    const doc = utils.createDocument();
+    const next = reducer(doc, recordEth());
+    expect(next.state.global.ethEquivalentAmount).toBe(5000);
+    expect(next.state.global.ethPriceUsdAtReceipt).toBe(2200);
+  });
+
+  it("MARK_REORGED moves status to REORGED so totals can exclude it", () => {
+    let doc = utils.createDocument();
+    doc = reducer(doc, recordEth());
+    doc = reducer(doc, markReorged({ _: null }));
+    expect(doc.state.global.reconciliationStatus).toBe("REORGED");
   });
 });

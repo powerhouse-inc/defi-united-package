@@ -10,6 +10,7 @@ import {
   AttachPledgeInputSchema,
   ClearMatchInputSchema,
   MarkAmbiguousInputSchema,
+  MarkReorgedInputSchema,
   OverrideMatchInputSchema,
   RecordReceiptInputSchema,
 } from "./schema/zod.js";
@@ -75,6 +76,18 @@ const stateReducer: StateReducer<OnchainReceiptPHState> = (
       ClearMatchInputSchema().parse(action.input);
 
       onchainReceiptReconciliationOperations.clearMatchOperation(
+        (state as any)[action.scope],
+        action as any,
+        dispatch,
+      );
+
+      break;
+    }
+
+    case "MARK_REORGED": {
+      MarkReorgedInputSchema().parse(action.input);
+
+      onchainReceiptReconciliationOperations.markReorgedOperation(
         (state as any)[action.scope],
         action as any,
         dispatch,

@@ -8,6 +8,7 @@ import type {
   AttachPledgeAction,
   ClearMatchAction,
   MarkAmbiguousAction,
+  MarkReorgedAction,
   OverrideMatchAction,
   RecordReceiptAction,
 } from "./actions.js";
@@ -36,6 +37,11 @@ export interface OnchainReceiptReconciliationOperations {
   clearMatchOperation: (
     state: OnchainReceiptGlobalState,
     action: ClearMatchAction,
+    dispatch?: SignalDispatch,
+  ) => void;
+  markReorgedOperation: (
+    state: OnchainReceiptGlobalState,
+    action: MarkReorgedAction,
     dispatch?: SignalDispatch,
   ) => void;
 }

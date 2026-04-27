@@ -19,6 +19,8 @@ export const onchainReceiptReconciliationOperations: OnchainReceiptReconciliatio
         contractAddress: action.input.asset.contractAddress ?? null,
       };
       state.amount = action.input.amount;
+      state.ethEquivalentAmount = action.input.ethEquivalentAmount;
+      state.ethPriceUsdAtReceipt = action.input.ethPriceUsdAtReceipt;
       if (action.input.rawLog) state.rawLog = action.input.rawLog;
     },
     attachPledgeOperation(state, action) {
@@ -35,5 +37,8 @@ export const onchainReceiptReconciliationOperations: OnchainReceiptReconciliatio
     clearMatchOperation(state, _action) {
       state.matchedPledgeId = null;
       state.reconciliationStatus = "UNMATCHED";
+    },
+    markReorgedOperation(state, _action) {
+      state.reconciliationStatus = "REORGED";
     },
   };

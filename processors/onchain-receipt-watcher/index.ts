@@ -1,22 +1,27 @@
 /**
  * Onchain Receipt Watcher Processor
  *
- * Polls an Ethereum RPC endpoint for incoming transfers to active relief
- * campaign contribution addresses and records them as OnchainReceipt documents.
+ * Polls Alchemy's enhanced `getAssetTransfers` API for inbound transfers
+ * (native ETH + whitelisted stablecoins) to active relief-campaign
+ * contribution addresses, prices each one in ETH at the time of the block
+ * via the Chainlink ETH/USD feed, and dispatches a `RECORD_RECEIPT`
+ * action per transfer.
  *
  * Architecture:
- * - The processor registers with the framework using a filter for relief-campaign
- *   operations. When any campaign operation arrives, `onOperations` is called.
- * - On first activation it starts a polling interval that runs until disconnect.
- * - Each poll cycle:
- *   1. Fetches the current block number
- *   2. Queries ERC-20 Transfer logs for all tracked contribution addresses
- *   3. For each new confirmed transfer, records an OnchainReceipt
- * - Idempotency is enforced via an in-memory Set of seen (chainId, txHash) keys.
- * - Only transfers with enough confirmations are recorded.
- *
- * Note: OperationWithContext provides the resulting state as a JSON string in
- * context.resultingState. We parse this to extract campaign contribution addresses.
+ *   - Registers against `defi-united/relief-campaign` operations to learn
+ *     about active campaigns and their contribution addresses.
+ *   - Starts a single polling loop (per processor instance) on first
+ *     activation; the loop runs until disconnect.
+ *   - Each cycle:
+ *       1. fetch latest block tip
+ *       2. compute confirmation-gated [fromBlock..toBlock] window
+ *       3. one alchemy_getAssetTransfers call per active treasury
+ *          (asks for native + whitelisted ERC-20 contracts)
+ *       4. for each new transfer, look up Chainlink price, build the
+ *          ETH-equivalent amount, dispatch RECORD_RECEIPT
+ *   - Idempotency: an in-memory `Set<string>` keyed by
+ *     "chainId:txHash:uniqueId". Cold-start seeded from existing receipts
+ *     on the drive (one-shot scan, not persisted across restarts).
  */
 
 import type {
@@ -28,55 +33,92 @@ import type { OperationWithContext } from "document-model";
 import type { RecordReceiptInput } from "document-models/onchain-receipt/v1";
 import { recordReceipt } from "document-models/onchain-receipt/v1";
 import {
-  getLogs,
+  getAssetTransfers,
   getBlockNumber,
-  buildErc20TransferFilter,
-  decodeAddressFromTopic,
-  decodeAmountFromData,
-  type LogEntry,
-  type HexString,
+  getEthUsdPrice,
+  toHex,
+  type AlchemyTransfer,
 } from "./eth-rpc.js";
 
 // ---------------------------------------------------------------------------
-// Constants
+// Whitelist (mainnet)
 // ---------------------------------------------------------------------------
+
+interface AcceptedAsset {
+  symbol: string;
+  /** null for native ETH */
+  contract: string | null;
+  decimals: number;
+}
+
+const ACCEPTED_ASSETS: AcceptedAsset[] = [
+  { symbol: "ETH", contract: null, decimals: 18 },
+  {
+    symbol: "USDC",
+    contract: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    decimals: 6,
+  },
+  {
+    symbol: "USDT",
+    contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    decimals: 6,
+  },
+  {
+    symbol: "DAI",
+    contract: "0x6b175474e89094c44da98b954eedeac495271d0f",
+    decimals: 18,
+  },
+];
+
+const ACCEPTED_BY_SYMBOL: ReadonlyMap<string, AcceptedAsset> = new Map(
+  ACCEPTED_ASSETS.map((a) => [a.symbol.toUpperCase(), a]),
+);
+
+const ACCEPTED_BY_CONTRACT: ReadonlyMap<string, AcceptedAsset> = new Map(
+  ACCEPTED_ASSETS.filter((a) => a.contract).map((a) => [a.contract!, a]),
+);
+
+const ERC20_CONTRACTS: string[] = ACCEPTED_ASSETS.filter((a) => a.contract).map(
+  (a) => a.contract!,
+);
+
+const STABLECOIN_SYMBOLS = new Set(["USDC", "USDT", "DAI"]);
 
 const CAMPAIGN_TYPE = "defi-united/relief-campaign";
+const ONCHAIN_RECEIPT_TYPE = "defi-united/onchain-receipt";
 
 // ---------------------------------------------------------------------------
-// Environment configuration
+// Configuration
 // ---------------------------------------------------------------------------
 
 interface ProcessorConfig {
-  rpcUrl: string | undefined;
+  alchemyUrl: string | undefined;
   pollIntervalMs: number;
   confirmationDepth: number;
+  ethPriceFallbackUsd: number;
+  ethPriceCacheMs: number;
   chainId: number;
 }
 
 function loadConfig(): ProcessorConfig {
   return {
-    rpcUrl: process.env.DEFI_UNITED_RPC_URL_1,
-    pollIntervalMs: Number(process.env.BLOCK_POLL_INTERVAL_MS) || 12_000,
-    confirmationDepth: Number(process.env.RECEIPT_CONFIRMATIONS) || 3,
+    alchemyUrl:
+      process.env.DEFI_UNITED_ALCHEMY_URL_1 ??
+      process.env.DEFI_UNITED_RPC_URL_1,
+    pollIntervalMs:
+      Number(process.env.DEFI_UNITED_BLOCK_POLL_INTERVAL_MS) || 12_000,
+    confirmationDepth:
+      Number(process.env.DEFI_UNITED_RECEIPT_CONFIRMATIONS) || 6,
+    ethPriceFallbackUsd:
+      Number(process.env.DEFI_UNITED_ETH_USD_PRICE_FALLBACK) || 2200,
+    ethPriceCacheMs: 60_000,
     chainId: 1,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Internal state held by a single processor instance
+// Processor state
 // ---------------------------------------------------------------------------
-
-interface ProcessorState {
-  /** Set of "chainId:txHash" strings that have already been recorded. */
-  seenTxHashes: Set<string>;
-  /** Interval ID for the polling loop. */
-  pollIntervalId: ReturnType<typeof setInterval> | null;
-  /** Abort controller for cancelling in-flight RPC calls on disconnect. */
-  abortController: AbortController;
-  /** Cache of campaign documents we've seen. Keyed by document ID. */
-  campaignCache: Map<string, CampaignInfo>;
-}
 
 interface CampaignInfo {
   documentId: string;
@@ -84,57 +126,142 @@ interface CampaignInfo {
   contributionAddresses: string[];
 }
 
+interface ProcessorState {
+  /** "chainId:txHash:uniqueId" set of already-recorded transfers. */
+  seenTransferKeys: Set<string>;
+  pollIntervalId: ReturnType<typeof setInterval> | null;
+  abort: AbortController;
+  campaigns: Map<string, CampaignInfo>;
+  /** Latest scanned block, per treasury — so each cycle resumes from there. */
+  treasuryHighWatermark: Map<string, number>;
+  /** Cached ETH/USD price + timestamp. */
+  priceCache: { price: number | null; fetchedAt: number };
+}
+
+function freshState(): ProcessorState {
+  return {
+    seenTransferKeys: new Set(),
+    pollIntervalId: null,
+    abort: new AbortController(),
+    campaigns: new Map(),
+    treasuryHighWatermark: new Map(),
+    priceCache: { price: null, fetchedAt: 0 },
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Processor factory builder
+// Factory
 // ---------------------------------------------------------------------------
 
-/**
- * Build a processor factory for the onchain receipt watcher.
- *
- * The factory is called once per drive when the drive is first detected.
- * It returns a ProcessorRecord containing the processor instance and its filter.
- */
 export function buildOnchainReceiptWatcher(
   module: IProcessorHostModule,
 ): ProcessorFactory {
   const config = loadConfig();
-
-  if (!config.rpcUrl) {
+  if (!config.alchemyUrl) {
     console.warn(
-      "[onchain-receipt-watcher] DEFI_UNITED_RPC_URL_1 not set — processor will be inactive",
+      "[onchain-receipt-watcher] DEFI_UNITED_ALCHEMY_URL_1 not set — processor inactive",
     );
   }
 
-  const state: ProcessorState = {
-    seenTxHashes: new Set(),
-    pollIntervalId: null,
-    abortController: new AbortController(),
-    campaignCache: new Map(),
-  };
+  const state = freshState();
 
   const factory: ProcessorFactory = async (_driveHeader) => {
-    const processorRecord: ProcessorRecord = {
+    // Eagerly seed the campaign cache + start polling on startup so we
+    // don't depend on a fresh op flowing through to wake the processor.
+    // If the reactor client is exposed on the module, scan for active
+    // campaigns and kick the loop now; otherwise wait for the first
+    // onOperations call to do it.
+    await ensurePollingStarted(module, config, state);
+
+    const record: ProcessorRecord = {
       filter: {
         documentType: [CAMPAIGN_TYPE],
         scope: ["global"],
         branch: ["main"],
       },
       processor: {
-        onOperations: (operations: OperationWithContext[]) =>
-          handleOperations(operations, module, config, state),
+        onOperations: (ops: OperationWithContext[]) =>
+          handleOperations(ops, module, config, state),
         onDisconnect: () => cleanup(state),
       },
       startFrom: "current",
     };
-
-    return [processorRecord];
+    return [record];
   };
 
   return factory;
 }
 
+/**
+ * Best-effort startup activation. Scans the reactor for current
+ * relief-campaign docs, populates the campaign cache, seeds idempotency
+ * keys, and starts the poll loop — all without waiting for an op to
+ * arrive. Safe to call repeatedly; starts the loop at most once.
+ */
+async function ensurePollingStarted(
+  module: IProcessorHostModule,
+  config: ProcessorConfig,
+  state: ProcessorState,
+): Promise<void> {
+  if (state.pollIntervalId !== null) return;
+  if (!config.alchemyUrl) return;
+
+  const client = (
+    module as unknown as {
+      reactorClient?: {
+        find: (q: { type: string }) => Promise<{
+          results: {
+            header: { id: string };
+            state: { global: Record<string, unknown> };
+          }[];
+        }>;
+      };
+    }
+  ).reactorClient;
+
+  if (client?.find) {
+    try {
+      const found = await client.find({ type: CAMPAIGN_TYPE });
+      for (const doc of found.results) {
+        const g = doc.state.global;
+        const status = g.status as string | undefined;
+        const addresses = g.contributionAddresses as
+          | { address: string; chainId: number }[]
+          | undefined;
+        state.campaigns.set(doc.header.id, {
+          documentId: doc.header.id,
+          isActive: status === "ACTIVE" || status === "EXECUTING",
+          contributionAddresses:
+            addresses
+              ?.filter((a) => a.chainId === config.chainId)
+              .map((a) => a.address.toLowerCase()) ?? [],
+        });
+      }
+      console.log(
+        `[onchain-receipt-watcher] startup scan: ${state.campaigns.size} campaign(s) loaded`,
+      );
+    } catch (err) {
+      console.warn(
+        "[onchain-receipt-watcher] startup campaign scan failed (will rely on onOperations):",
+        err,
+      );
+    }
+  }
+
+  await seedSeenKeys(module, state);
+
+  state.pollIntervalId = setInterval(
+    () =>
+      pollOnce(config, state, module).catch((err) => {
+        console.error("[onchain-receipt-watcher] poll failed:", err);
+      }),
+    config.pollIntervalMs,
+  );
+  await pollOnce(config, state, module);
+}
+
 // ---------------------------------------------------------------------------
-// Operation handler — triggers / maintains the polling loop
+// Operation handler — drives the poll loop
 // ---------------------------------------------------------------------------
 
 async function handleOperations(
@@ -143,235 +270,297 @@ async function handleOperations(
   config: ProcessorConfig,
   state: ProcessorState,
 ): Promise<void> {
-  // Update campaign cache from incoming operations
   for (const op of operations) {
-    updateCampaignFromOperation(op, config, state.campaignCache);
+    updateCampaignFromOperation(op, config, state.campaigns);
   }
-
-  // Start polling if not already running
-  if (state.pollIntervalId === null && config.rpcUrl) {
-    state.pollIntervalId = setInterval(
-      () => pollOnce(config, state, module),
-      config.pollIntervalMs,
-    );
-    // Run immediately on first trigger
-    await pollOnce(config, state, module);
-  }
+  // Belt-and-suspenders: if startup activation didn't run (no reactor
+  // client exposure) the loop will start here on the first incoming op.
+  await ensurePollingStarted(module, config, state);
 }
 
-// ---------------------------------------------------------------------------
-// Campaign cache
-// ---------------------------------------------------------------------------
-
-/**
- * Extract campaign state from an operation's resultingState field.
- *
- * The framework provides the post-operation global state as a JSON string in
- * context.resultingState. We parse it to extract the campaign status and
- * contribution addresses.
- */
 function updateCampaignFromOperation(
   op: OperationWithContext,
-  processorConfig: ProcessorConfig,
+  config: ProcessorConfig,
   cache: Map<string, CampaignInfo>,
 ): void {
-  const { context } = op;
-  const documentId = context.documentId;
+  const documentId = op.context.documentId;
+  if (!op.context.resultingState) return;
 
-  if (!context.resultingState) {
-    // No resulting state available (e.g., header operation).
-    // Keep the existing cache entry if present, or skip.
-    return;
-  }
-
-  let globalState: Record<string, unknown>;
+  let global: Record<string, unknown>;
   try {
-    globalState = JSON.parse(context.resultingState) as Record<string, unknown>;
+    global = JSON.parse(op.context.resultingState) as Record<string, unknown>;
   } catch {
     return;
   }
 
-  if (!globalState || typeof globalState !== "object") return;
-
-  const status = globalState.status as string | undefined;
-  const contributionAddresses = globalState.contributionAddresses as
+  const status = global.status as string | undefined;
+  const addresses = global.contributionAddresses as
     | { address: string; chainId: number }[]
     | undefined;
 
-  const isActive = status === "ACTIVE" || status === "EXECUTING";
-  const addresses: string[] =
-    contributionAddresses
-      ?.filter((a) => a.chainId === processorConfig.chainId)
-      .map((a) => a.address.toLowerCase()) || [];
-
   cache.set(documentId, {
     documentId,
-    isActive,
-    contributionAddresses: addresses,
+    isActive: status === "ACTIVE" || status === "EXECUTING",
+    contributionAddresses:
+      addresses
+        ?.filter((a) => a.chainId === config.chainId)
+        .map((a) => a.address.toLowerCase()) ?? [],
   });
 }
 
-function getTrackedAddresses(cache: Map<string, CampaignInfo>): string[] {
-  const addresses = new Set<string>();
-  for (const campaign of cache.values()) {
-    if (campaign.isActive) {
-      for (const addr of campaign.contributionAddresses) {
-        addresses.add(addr);
-      }
-    }
+function activeTreasuries(cache: Map<string, CampaignInfo>): string[] {
+  const out = new Set<string>();
+  for (const c of cache.values()) {
+    if (!c.isActive) continue;
+    for (const addr of c.contributionAddresses) out.add(addr);
   }
-  return Array.from(addresses);
+  return [...out];
 }
 
 // ---------------------------------------------------------------------------
-// Polling
+// Cold-start: seed seen-set from already-recorded receipts on the drive
+// ---------------------------------------------------------------------------
+
+async function seedSeenKeys(
+  module: IProcessorHostModule,
+  state: ProcessorState,
+): Promise<void> {
+  const client = (
+    module as unknown as {
+      reactorClient?: {
+        find: (q: { type: string }) => Promise<{
+          results: { state: { global: Record<string, unknown> } }[];
+        }>;
+      };
+    }
+  ).reactorClient;
+  if (!client?.find) return;
+
+  try {
+    const found = await client.find({ type: ONCHAIN_RECEIPT_TYPE });
+    for (const doc of found.results) {
+      const g = doc.state.global;
+      const chainId = g.chainId as number | null;
+      const txHash = g.txHash as string | null;
+      if (chainId == null || !txHash) continue;
+      // Wildcard match across uniqueId so we never re-record what's stored.
+      state.seenTransferKeys.add(`${chainId}:${txHash}:*`);
+    }
+  } catch (err) {
+    console.warn(
+      "[onchain-receipt-watcher] could not seed seen-set from existing receipts:",
+      err,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Poll cycle
 // ---------------------------------------------------------------------------
 
 async function pollOnce(
-  processorConfig: ProcessorConfig,
+  config: ProcessorConfig,
   state: ProcessorState,
-  _module: IProcessorHostModule,
+  module: IProcessorHostModule,
 ): Promise<void> {
-  if (!processorConfig.rpcUrl || state.abortController.signal.aborted) return;
+  if (!config.alchemyUrl || state.abort.signal.aborted) return;
 
-  try {
-    const trackedAddresses = getTrackedAddresses(state.campaignCache);
-    if (trackedAddresses.length === 0) return;
+  const treasuries = activeTreasuries(state.campaigns);
+  if (treasuries.length === 0) return;
 
-    const currentBlock = await getBlockNumber(processorConfig.rpcUrl);
+  const tip = await getBlockNumber(config.alchemyUrl);
+  const safeBlock = Math.max(0, tip - config.confirmationDepth);
 
-    // Determine the earliest block we care about (current - some buffer to catch
-    // logs we might have missed). We use a fixed scan window to avoid huge queries.
-    const scanWindow = 100; // blocks
-    const fromBlock = Math.max(0, currentBlock - scanWindow);
-
-    const logs = await fetchTransferLogs(
-      processorConfig.rpcUrl,
-      trackedAddresses,
-      toHex(fromBlock),
-      toHex(currentBlock),
-    );
-
-    for (const log of logs) {
-      await processLog(log, processorConfig, state, _module);
-    }
-  } catch (err) {
-    console.error("[onchain-receipt-watcher] Poll error:", err);
+  for (const treasury of treasuries) {
+    await scanTreasury(treasury, safeBlock, config, state, module);
   }
 }
 
-/**
- * Fetch ERC-20 Transfer logs for the given addresses in the block range.
- */
-async function fetchTransferLogs(
-  rpcUrl: string,
-  addresses: string[],
-  fromBlock: HexString,
-  toBlock: HexString,
-): Promise<LogEntry[]> {
-  const filter = buildErc20TransferFilter(addresses, fromBlock, toBlock);
-  return getLogs(rpcUrl, filter);
-}
-
-// ---------------------------------------------------------------------------
-// Log processing
-// ---------------------------------------------------------------------------
-
-/**
- * Process a single ERC-20 Transfer log: check idempotency, confirmation depth,
- * and dispatch RECORD_RECEIPT if all checks pass.
- */
-async function processLog(
-  log: LogEntry,
-  processorConfig: ProcessorConfig,
+async function scanTreasury(
+  treasury: string,
+  safeBlock: number,
+  config: ProcessorConfig,
   state: ProcessorState,
   module: IProcessorHostModule,
 ): Promise<void> {
-  const txHash = log.transactionHash;
-  const idempotencyKey = `${processorConfig.chainId}:${txHash}`;
+  if (!config.alchemyUrl) return;
 
-  // Idempotency check
-  if (state.seenTxHashes.has(idempotencyKey)) return;
+  const lastSeen = state.treasuryHighWatermark.get(treasury);
+  // First cycle: scan a recent window (~12h on mainnet).
+  // Subsequent cycles: resume from the last-seen block.
+  const fromBlock =
+    lastSeen != null ? lastSeen + 1 : Math.max(0, safeBlock - 5_000);
+  if (fromBlock > safeBlock) return;
 
-  const logBlockNumber = parseInt(log.blockNumber, 16);
-  const currentBlock = await getBlockNumber(processorConfig.rpcUrl!);
+  let pageKey: string | undefined;
+  let highest = lastSeen ?? fromBlock - 1;
 
-  // Confirmation depth check
-  if (currentBlock - logBlockNumber < processorConfig.confirmationDepth) return;
+  do {
+    const page = await getAssetTransfers(config.alchemyUrl, {
+      fromBlock: toHex(fromBlock),
+      toBlock: toHex(safeBlock),
+      toAddress: treasury,
+      category: ["external", "erc20"],
+      contractAddresses: ERC20_CONTRACTS,
+      maxCount: 200,
+      pageKey,
+    });
 
-  // Decode transfer details
-  const toAddress = decodeAddressFromTopic(log.topics[2]);
-  const fromAddress = decodeAddressFromTopic(log.topics[1]);
-  const amountWei = decodeAmountFromData(log.data);
+    for (const transfer of page.transfers) {
+      try {
+        await processTransfer(transfer, treasury, config, state, module);
+      } catch (err) {
+        console.error(
+          `[onchain-receipt-watcher] transfer ${transfer.hash} failed:`,
+          err,
+        );
+      }
+      const blockNum = parseInt(transfer.blockNum, 16);
+      if (blockNum > highest) highest = blockNum;
+    }
 
-  // Determine asset info
-  const contractAddress = log.address.toLowerCase();
-  const symbol = contractAddress === ethersZeroAddress() ? "ETH" : "UNKNOWN";
+    pageKey = page.pageKey;
+  } while (pageKey);
 
-  // Build receipt input
-  const receiptInput: RecordReceiptInput = {
-    txHash: txHash,
-    chainId: processorConfig.chainId,
-    blockNumber: logBlockNumber,
-    blockTimestamp: new Date().toISOString(),
-    fromAddress: fromAddress,
-    toAddress: toAddress,
-    amount: Number(amountWei),
-    asset: {
-      symbol,
-      contractAddress:
-        contractAddress !== ethersZeroAddress() ? contractAddress : undefined,
-    },
-    rawLog: JSON.stringify(log),
-  };
-
-  // Mark as seen before dispatching (prevents duplicates on retry)
-  state.seenTxHashes.add(idempotencyKey);
-
-  // Dispatch RECORD_RECEIPT to the matching campaign document.
-  await recordReceiptForCampaign(
-    receiptInput,
-    state.campaignCache,
-    module,
-    toAddress,
-  );
+  state.treasuryHighWatermark.set(treasury, Math.max(highest, safeBlock));
 }
 
-/**
- * Find the matching campaign for this receipt and dispatch the action.
- */
-async function recordReceiptForCampaign(
-  receiptInput: RecordReceiptInput,
-  campaignCache: Map<string, CampaignInfo>,
+// ---------------------------------------------------------------------------
+// Per-transfer processing
+// ---------------------------------------------------------------------------
+
+async function processTransfer(
+  transfer: AlchemyTransfer,
+  treasury: string,
+  config: ProcessorConfig,
+  state: ProcessorState,
   module: IProcessorHostModule,
-  toAddress: string,
 ): Promise<void> {
-  const toLower = toAddress.toLowerCase();
+  // Resolve asset
+  let asset: AcceptedAsset | undefined;
+  if (transfer.category === "external") {
+    asset = ACCEPTED_BY_SYMBOL.get("ETH");
+  } else if (transfer.category === "erc20" && transfer.rawContract.address) {
+    asset = ACCEPTED_BY_CONTRACT.get(
+      transfer.rawContract.address.toLowerCase(),
+    );
+  }
+  if (!asset) return;
 
-  for (const campaign of campaignCache.values()) {
-    if (!campaign.isActive) continue;
-    if (!campaign.contributionAddresses.includes(toLower)) continue;
+  // Defense-in-depth: Alchemy already filters by toAddress.
+  if (transfer.to.toLowerCase() !== treasury.toLowerCase()) return;
 
-    const action = recordReceipt(receiptInput);
+  // Idempotency
+  const baseKey = `${config.chainId}:${transfer.hash}`;
+  const fullKey = `${baseKey}:${transfer.uniqueId ?? "0"}`;
+  if (
+    state.seenTransferKeys.has(`${baseKey}:*`) ||
+    state.seenTransferKeys.has(fullKey)
+  ) {
+    return;
+  }
 
+  // Resolve amount (Alchemy returns token-units as a Number).
+  if (transfer.value == null || transfer.value <= 0) return;
+  const amount = transfer.value;
+
+  // Resolve ETH price (cached)
+  const ethPriceUsd = await ethPrice(config, state);
+
+  // Compute ETH equivalent
+  const ethEquivalent = STABLECOIN_SYMBOLS.has(asset.symbol)
+    ? amount / ethPriceUsd
+    : amount;
+
+  // Block timestamp from Alchemy (ISO string when withMetadata is true).
+  const blockTimestamp =
+    transfer.metadata?.blockTimestamp ?? new Date().toISOString();
+
+  const blockNumber = parseInt(transfer.blockNum, 16);
+
+  const input: RecordReceiptInput = {
+    chainId: config.chainId,
+    txHash: transfer.hash,
+    blockNumber,
+    blockTimestamp,
+    fromAddress: transfer.from,
+    toAddress: transfer.to,
+    asset: {
+      symbol: asset.symbol,
+      contractAddress: asset.contract ?? undefined,
+    },
+    amount,
+    ethEquivalentAmount: ethEquivalent,
+    ethPriceUsdAtReceipt: ethPriceUsd,
+    rawLog: JSON.stringify({
+      uniqueId: transfer.uniqueId,
+      category: transfer.category,
+      blockNum: transfer.blockNum,
+    }),
+  };
+
+  state.seenTransferKeys.add(fullKey);
+  state.seenTransferKeys.add(`${baseKey}:*`);
+
+  await dispatchToCampaign(input, treasury, state.campaigns, module);
+}
+
+async function dispatchToCampaign(
+  input: RecordReceiptInput,
+  treasury: string,
+  campaigns: Map<string, CampaignInfo>,
+  module: IProcessorHostModule,
+): Promise<void> {
+  for (const c of campaigns.values()) {
+    if (!c.isActive) continue;
+    if (!c.contributionAddresses.includes(treasury.toLowerCase())) continue;
     try {
-      await module.dispatch.execute(campaign.documentId, "main", [action]);
+      await module.dispatch.execute(c.documentId, "main", [
+        recordReceipt(input),
+      ]);
       console.log(
-        `[onchain-receipt-watcher] Recorded receipt ${receiptInput.txHash} for campaign ${campaign.documentId}`,
+        `[onchain-receipt-watcher] recorded ${input.amount} ${input.asset.symbol} (${input.ethEquivalentAmount.toFixed(4)} ETH) tx=${input.txHash} → campaign ${c.documentId}`,
       );
     } catch (err) {
       console.error(
-        `[onchain-receipt-watcher] Failed to record receipt for campaign ${campaign.documentId}:`,
+        `[onchain-receipt-watcher] dispatch failed for tx=${input.txHash} campaign=${c.documentId}:`,
         err,
       );
     }
     return;
   }
+}
 
-  // No matching campaign found — log the finding
-  console.log(
-    `[onchain-receipt-watcher] Transfer ${receiptInput.txHash} to ${toLower} — no matching active campaign`,
-  );
+// ---------------------------------------------------------------------------
+// ETH/USD price (cached, with fallback)
+// ---------------------------------------------------------------------------
+
+async function ethPrice(
+  config: ProcessorConfig,
+  state: ProcessorState,
+): Promise<number> {
+  const now = Date.now();
+  if (
+    state.priceCache.price != null &&
+    now - state.priceCache.fetchedAt < config.ethPriceCacheMs
+  ) {
+    return state.priceCache.price;
+  }
+  if (!config.alchemyUrl) return config.ethPriceFallbackUsd;
+  try {
+    const price = await getEthUsdPrice(config.alchemyUrl);
+    if (Number.isFinite(price) && price > 0) {
+      state.priceCache = { price, fetchedAt: now };
+      return price;
+    }
+  } catch (err) {
+    console.warn(
+      "[onchain-receipt-watcher] Chainlink ETH/USD read failed, using fallback:",
+      err,
+    );
+  }
+  state.priceCache = { price: config.ethPriceFallbackUsd, fetchedAt: now };
+  return config.ethPriceFallbackUsd;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,21 +572,24 @@ async function cleanup(state: ProcessorState): Promise<void> {
     clearInterval(state.pollIntervalId);
     state.pollIntervalId = null;
   }
-  state.abortController.abort();
-  state.abortController = new AbortController();
-  console.log(
-    "[onchain-receipt-watcher] Processor disconnected, polling stopped",
-  );
+  state.abort.abort();
+  console.log("[onchain-receipt-watcher] disconnected, polling stopped");
 }
 
 // ---------------------------------------------------------------------------
-// Utilities
+// Test surface
 // ---------------------------------------------------------------------------
 
-function toHex(n: number): HexString {
-  return `0x${n.toString(16)}`;
-}
-
-function ethersZeroAddress(): string {
-  return "0x0000000000000000000000000000000000000000";
-}
+export const __testing = {
+  ACCEPTED_ASSETS,
+  ACCEPTED_BY_CONTRACT,
+  ACCEPTED_BY_SYMBOL,
+  ERC20_CONTRACTS,
+  loadConfig,
+  freshState,
+  processTransfer,
+  ethPrice,
+  scanTreasury,
+  pollOnce,
+  updateCampaignFromOperation,
+};

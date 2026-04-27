@@ -7,8 +7,13 @@ import type { ExternalDependencyDocument } from "../../document-models/external-
 import type { OnchainReceiptDocument } from "../../document-models/onchain-receipt/v1/gen/types.js";
 import type { StatusUpdateDocument } from "../../document-models/status-update/v1/gen/types.js";
 import type { PHDocument } from "document-model";
-import type { CampaignBundle, PublicCampaign } from "./projections.js";
+import type {
+  CampaignBundle,
+  PublicCampaign,
+  PublicReceiptEntry,
+} from "./projections.js";
 import { projectCampaign } from "./projections.js";
+import { fetchLiveBalance, loadOverlayConfig } from "./onchain-overlay.js";
 
 const RELIEF_CAMPAIGN_TYPE = "defi-united/relief-campaign";
 const PLEDGE_TYPE = "defi-united/pledge";
@@ -129,7 +134,20 @@ async function buildPublicCampaign(
     driveId: drive.driveId,
     lastUpdateAt: lastUpdateAtFor(drive),
   };
-  return projectCampaign(bundle);
+
+  // Live on-chain overlay (cached server-side) — best-effort, returns
+  // null on RPC failure or when no Alchemy URL is configured.
+  const overlayConfig = loadOverlayConfig();
+  const treasury = drive.campaign.state.global.contributionAddresses?.[0];
+  const liveBalance = treasury
+    ? await fetchLiveBalance({
+        alchemyUrl: overlayConfig.alchemyUrl,
+        treasuryAddress: treasury.address,
+        ethPriceFallbackUsd: overlayConfig.ethPriceFallbackUsd,
+      })
+    : null;
+
+  return projectCampaign(bundle, liveBalance);
 }
 
 // Drive ID → campaign mapping, populated during onSetup
@@ -194,6 +212,17 @@ export const getResolvers = (
         campaigns.map((c) => buildPublicCampaign(subgraph.reactorClient, c)),
       );
       return projected.filter((p): p is PublicCampaign => p !== null);
+    },
+  },
+
+  // Field resolver so `recentReceipts(limit: N)` slices server-side.
+  DefiUnited_PublicCampaign: {
+    recentReceipts: (
+      parent: PublicCampaign,
+      args: { limit?: number },
+    ): PublicReceiptEntry[] => {
+      const limit = args.limit ?? 20;
+      return parent.recentReceipts.slice(0, Math.max(0, limit));
     },
   },
 

@@ -45,6 +45,9 @@ export interface PublicCampaign {
   contributorsPublic: PublicPledge[];
   dependenciesPublic: PublicDependency[];
   recentUpdates: PublicStatusUpdate[];
+  recentReceipts: PublicReceiptEntry[];
+  onchainLiveBalance: OnchainLiveBalance | null;
+  pendingReceiptsEthEquivalent: string | null;
   riskDisclaimer: string | null;
   externalLinks: Array<{ label: string; url: string }>;
   affectedAsset: {
@@ -53,6 +56,35 @@ export interface PublicCampaign {
     chainId: number;
   } | null;
   lastUpdateAt: string | null;
+}
+
+export interface PublicReceiptEntry {
+  id: string;
+  txHash: string;
+  blockNumber: number;
+  blockTimestamp: string;
+  fromAddress: string;
+  toAddress: string;
+  assetSymbol: string;
+  assetContractAddress: string | null;
+  amount: string;
+  ethEquivalentAmount: string;
+  ethPriceUsdAtReceipt: number;
+  reconciliationStatus: string;
+  matchedPledgeId: string | null;
+}
+
+export interface OnchainLiveBalance {
+  totalEthEquivalent: string;
+  perAsset: Array<{
+    symbol: string;
+    contractAddress: string | null;
+    rawBalance: string;
+    formattedAmount: string;
+    ethEquivalent: string;
+  }>;
+  fetchedAt: string;
+  ethPriceUsd: number;
 }
 
 export interface PublicPledge {
@@ -91,17 +123,27 @@ export interface PublicStatusUpdate {
 
 const ANON_DISPLAY = "Anonymous Contributor";
 
-export function projectCampaign(bundle: CampaignBundle): PublicCampaign {
+export function projectCampaign(
+  bundle: CampaignBundle,
+  liveBalance: OnchainLiveBalance | null = null,
+): PublicCampaign {
   const c = bundle.campaign.state.global;
 
   let totalPledgedNum = 0;
-  let totalReceivedNum = 0;
   for (const pledge of bundle.pledges) {
     const ps = pledge.state.global;
     if (ps.status !== "CANCELLED" && ps.status !== "FAILED") {
       totalPledgedNum += num(ps.pledgedAmount);
     }
-    totalReceivedNum += num(ps.receivedAmount);
+  }
+
+  // totalReceived = sum of receipt.ethEquivalentAmount across non-REORGED
+  // on-chain receipts. Document-derived audit trail.
+  let totalReceivedNum = 0;
+  for (const r of bundle.receipts) {
+    const rs = r.state.global;
+    if (rs.reconciliationStatus === "REORGED") continue;
+    totalReceivedNum += num(rs.ethEquivalentAmount);
   }
 
   const targetNum = num(c.targetAmount);
@@ -194,6 +236,42 @@ export function projectCampaign(bundle: CampaignBundle): PublicCampaign {
       };
     });
 
+  // Newest-first feed of on-chain receipts (capped to a sane default; the
+  // resolver further trims by `limit` argument).
+  const recentReceipts: PublicReceiptEntry[] = bundle.receipts
+    .filter((r) => !!r.state.global.txHash)
+    .sort(
+      (a, b) =>
+        (b.state.global.blockNumber ?? 0) - (a.state.global.blockNumber ?? 0),
+    )
+    .slice(0, 100)
+    .map((r): PublicReceiptEntry => {
+      const rs = r.state.global;
+      return {
+        id: r.header.id,
+        txHash: rs.txHash ?? "",
+        blockNumber: rs.blockNumber ?? 0,
+        blockTimestamp: rs.blockTimestamp ?? "",
+        fromAddress: rs.fromAddress ?? "",
+        toAddress: rs.toAddress ?? "",
+        assetSymbol: rs.asset?.symbol ?? "ETH",
+        assetContractAddress: rs.asset?.contractAddress ?? null,
+        amount: str(rs.amount),
+        ethEquivalentAmount: str(rs.ethEquivalentAmount),
+        ethPriceUsdAtReceipt: rs.ethPriceUsdAtReceipt ?? 0,
+        reconciliationStatus: rs.reconciliationStatus,
+        matchedPledgeId: rs.matchedPledgeId ?? null,
+      };
+    });
+
+  // Pending = max(0, liveBalance - totalReceived). Negative or zero → "0".
+  let pendingReceiptsEthEquivalent: string | null = null;
+  if (liveBalance) {
+    const liveNum = num(liveBalance.totalEthEquivalent);
+    const pending = liveNum - totalReceivedNum;
+    pendingReceiptsEthEquivalent = pending > 0 ? str(pending) : "0";
+  }
+
   return {
     slug: c.slug,
     name: c.name,
@@ -207,6 +285,9 @@ export function projectCampaign(bundle: CampaignBundle): PublicCampaign {
     pledgeCount: bundle.pledges.length,
     dependenciesBlocking,
     dependenciesResolved,
+    recentReceipts,
+    onchainLiveBalance: liveBalance,
+    pendingReceiptsEthEquivalent,
     contributionAddresses: c.contributionAddresses.map((a) => ({
       chainId: a.chainId,
       address: a.address,
