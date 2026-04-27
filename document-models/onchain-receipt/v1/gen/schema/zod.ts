@@ -144,13 +144,17 @@ export function RecordReceiptInputSchema(): z.ZodObject<
     chainId: z.number(),
     ethEquivalentAmount: z.number(),
     ethPriceUsdAtReceipt: z.number(),
-    fromAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    fromAddress: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     rawLog: z.string().nullish(),
-    toAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-      message: "Invalid Ethereum address format",
-    }),
+    toAddress: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, {
+        message: "Invalid Ethereum address format",
+      }),
     txHash: z.string(),
   });
 }

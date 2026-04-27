@@ -20,10 +20,10 @@ export const documentModel: DocumentModelGlobalState = {
         },
         global: {
           schema:
-            "type OnchainReceiptState {\n    chainId: Int\n    txHash: String\n    blockNumber: Int\n    blockTimestamp: DateTime\n    fromAddress: EthereumAddress\n    toAddress: EthereumAddress\n    asset: ReceiptAsset\n    amount: Amount_Tokens\n    matchedPledgeId: PHID\n    reconciliationStatus: ReconciliationStatus!\n    rawLog: String\n}\n\nenum ReconciliationStatus {\n    UNMATCHED\n    MATCHED\n    AMBIGUOUS\n    MANUALLY_OVERRIDDEN\n}\n\ntype ReceiptAsset {\n    symbol: String!\n    contractAddress: EthereumAddress\n}",
+            "type OnchainReceiptState {\n    chainId: Int\n    txHash: String\n    blockNumber: Int\n    blockTimestamp: DateTime\n    fromAddress: EthereumAddress\n    toAddress: EthereumAddress\n    asset: ReceiptAsset\n    amount: Amount_Tokens\n    ethEquivalentAmount: Amount_Tokens\n    ethPriceUsdAtReceipt: Float\n    matchedPledgeId: PHID\n    reconciliationStatus: ReconciliationStatus!\n    rawLog: String\n}\n\nenum ReconciliationStatus {\n    UNMATCHED\n    MATCHED\n    AMBIGUOUS\n    MANUALLY_OVERRIDDEN\n    REORGED\n}\n\ntype ReceiptAsset {\n    symbol: String!\n    contractAddress: EthereumAddress\n}",
           examples: [],
           initialValue:
-            '{\n  "chainId": null,\n  "txHash": null,\n  "blockNumber": null,\n  "blockTimestamp": null,\n  "fromAddress": null,\n  "toAddress": null,\n  "asset": null,\n  "amount": null,\n  "matchedPledgeId": null,\n  "reconciliationStatus": "UNMATCHED",\n  "rawLog": null\n}',
+            '{\n  "chainId": null,\n  "txHash": null,\n  "blockNumber": null,\n  "blockTimestamp": null,\n  "fromAddress": null,\n  "toAddress": null,\n  "asset": null,\n  "amount": null,\n  "ethEquivalentAmount": null,\n  "ethPriceUsdAtReceipt": null,\n  "matchedPledgeId": null,\n  "reconciliationStatus": "UNMATCHED",\n  "rawLog": null\n}',
         },
       },
       modules: [
@@ -37,10 +37,10 @@ export const documentModel: DocumentModelGlobalState = {
               name: "RECORD_RECEIPT",
               description: "Record an on-chain transfer to a campaign address",
               schema:
-                "input ReceiptAssetInput {\n    symbol: String!\n    contractAddress: EthereumAddress\n}\n\ninput RecordReceiptInput {\n    chainId: Int!\n    txHash: String!\n    blockNumber: Int!\n    blockTimestamp: DateTime!\n    fromAddress: EthereumAddress!\n    toAddress: EthereumAddress!\n    asset: ReceiptAssetInput!\n    amount: Amount_Tokens!\n    rawLog: String\n}",
+                "input ReceiptAssetInput {\n    symbol: String!\n    contractAddress: EthereumAddress\n}\n\ninput RecordReceiptInput {\n    chainId: Int!\n    txHash: String!\n    blockNumber: Int!\n    blockTimestamp: DateTime!\n    fromAddress: EthereumAddress!\n    toAddress: EthereumAddress!\n    asset: ReceiptAssetInput!\n    amount: Amount_Tokens!\n    ethEquivalentAmount: Amount_Tokens!\n    ethPriceUsdAtReceipt: Float!\n    rawLog: String\n}",
               template: "Record an on-chain transfer to a campaign address",
               reducer:
-                "if (state.txHash) throw new ReceiptAlreadyRecordedError('Receipt has already been recorded');\nstate.chainId = action.input.chainId;\nstate.txHash = action.input.txHash;\nstate.blockNumber = action.input.blockNumber;\nstate.blockTimestamp = action.input.blockTimestamp;\nstate.fromAddress = action.input.fromAddress;\nstate.toAddress = action.input.toAddress;\nstate.asset = {\n  symbol: action.input.asset.symbol,\n  contractAddress: action.input.asset.contractAddress ?? null,\n};\nstate.amount = action.input.amount;\nif (action.input.rawLog) state.rawLog = action.input.rawLog;",
+                "if (state.txHash) throw new ReceiptAlreadyRecordedError('Receipt has already been recorded');\nstate.chainId = action.input.chainId;\nstate.txHash = action.input.txHash;\nstate.blockNumber = action.input.blockNumber;\nstate.blockTimestamp = action.input.blockTimestamp;\nstate.fromAddress = action.input.fromAddress;\nstate.toAddress = action.input.toAddress;\nstate.asset = {\n  symbol: action.input.asset.symbol,\n  contractAddress: action.input.asset.contractAddress ?? null,\n};\nstate.amount = action.input.amount;\nstate.ethEquivalentAmount = action.input.ethEquivalentAmount;\nstate.ethPriceUsdAtReceipt = action.input.ethPriceUsdAtReceipt;\nif (action.input.rawLog) state.rawLog = action.input.rawLog;",
               errors: [
                 {
                   id: "err-or-already-recorded",
@@ -105,11 +105,27 @@ export const documentModel: DocumentModelGlobalState = {
               examples: [],
               scope: "global",
             },
+            {
+              id: "op-or-reorged",
+              name: "MARK_REORGED",
+              description:
+                "Mark this receipt as reorged out of the canonical chain. Excluded from totals.",
+              schema: "input MarkReorgedInput {\n    _: Boolean\n}",
+              template:
+                "Mark this receipt as reorged out of the canonical chain",
+              reducer: "state.reconciliationStatus = 'REORGED';",
+              errors: [],
+              examples: [],
+              scope: "global",
+            },
           ],
         },
       ],
       version: 1,
-      changeLog: [],
+      changeLog: [
+        "Add ethEquivalentAmount + ethPriceUsdAtReceipt for ETH-denominated rollups",
+        "Add MARK_REORGED action + REORGED reconciliation status",
+      ],
     },
   ],
 };
