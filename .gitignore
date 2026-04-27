@@ -1,11 +1,22 @@
-
+# Build artifacts
 dist
 coverage
+
+# Dependencies
 node_modules
+
+# Caches
 .eslintcache
+
+# Local env
+.env
 .env.local
 
+# Powerhouse runtime working state
 .ph
 projects-import.js
 
+# IDE / agent local state
 .claude/settings.local.json
+.cursor/settings.local.json
+.gemini/settings.local.json
