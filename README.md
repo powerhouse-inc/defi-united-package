@@ -6,6 +6,8 @@ The first instance is **DeFi United** ([defiunited.world](https://defiunited.wor
 
 > **Live demo**: [defiunited.web3.berlin](https://defiunited.web3.berlin) — staging tenant runs the latest release with on-chain indexing wired against Ethereum mainnet.
 
+> **New to Powerhouse?** Read [`docs/architecture.md`](docs/architecture.md) for a concept ramp — what document models, editors, processors, and subgraphs are, how they fit together, and how this package implements each.
+
 ## What this package gives you
 
 A turn-key data layer for running a public, verifiable, multi-DAO relief coalition. Publish to a Powerhouse registry, point a Switchboard tenant at it via `PH_REGISTRY_PACKAGES=defi-united-package@1.1.6`, and the tenant exposes:
