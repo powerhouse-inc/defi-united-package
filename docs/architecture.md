@@ -430,7 +430,5 @@ defi-united-package/
 
 ## Further reading
 
-- [Powerhouse docs](https://docs.powerhouse.io/) — official framework docs
-- [Renown auth pattern](https://docs.powerhouse.io/renown) — how the operations subgraph authenticates
-- [Vetra Studio guide](https://docs.powerhouse.io/vetra) — local dev environment
+- [Vetra Academy](https://academy.vetra.io/) — Powerhouse + Vetra concepts, tutorials, and reference docs
 - [`../defiunited-web`](../../defiunited-web) — the public-facing companion frontend
