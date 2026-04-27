@@ -46,6 +46,7 @@ export interface PublicCampaign {
   dependenciesPublic: PublicDependency[];
   recentUpdates: PublicStatusUpdate[];
   recentReceipts: PublicReceiptEntry[];
+  recentOnchainTransfers: PublicReceiptEntry[];
   onchainLiveBalance: OnchainLiveBalance | null;
   pendingReceiptsEthEquivalent: string | null;
   riskDisclaimer: string | null;
@@ -126,6 +127,7 @@ const ANON_DISPLAY = "Anonymous Contributor";
 export function projectCampaign(
   bundle: CampaignBundle,
   liveBalance: OnchainLiveBalance | null = null,
+  recentOnchainTransfers: PublicReceiptEntry[] = [],
 ): PublicCampaign {
   const c = bundle.campaign.state.global;
 
@@ -286,6 +288,7 @@ export function projectCampaign(
     dependenciesBlocking,
     dependenciesResolved,
     recentReceipts,
+    recentOnchainTransfers,
     onchainLiveBalance: liveBalance,
     pendingReceiptsEthEquivalent,
     contributionAddresses: c.contributionAddresses.map((a) => ({

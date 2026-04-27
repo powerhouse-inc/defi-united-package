@@ -94,6 +94,13 @@ export const schema: DocumentNode = gql`
     """
     recentReceipts(limit: Int = 20): [DefiUnited_PublicReceiptEntry!]!
     """
+    Last N actual inbound transfers to the treasury, fetched live via
+    Alchemy. Raw on-chain feed — may not yet be indexed as receipt
+    documents. Reconciliation status is "ONCHAIN" so the UI can
+    distinguish these from doc-derived receipts.
+    """
+    recentOnchainTransfers(limit: Int = 25): [DefiUnited_PublicReceiptEntry!]!
+    """
     Live on-chain balance overlay. Snapshot of native ETH + the accepted
     stablecoin balances of the campaign's first treasury, expressed in
     ETH-equivalent. Null if the RPC fetch failed or no Alchemy URL is

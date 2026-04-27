@@ -13,7 +13,11 @@ import type {
   PublicReceiptEntry,
 } from "./projections.js";
 import { projectCampaign } from "./projections.js";
-import { fetchLiveBalance, loadOverlayConfig } from "./onchain-overlay.js";
+import {
+  fetchLiveBalance,
+  fetchRecentTransfers,
+  loadOverlayConfig,
+} from "./onchain-overlay.js";
 
 const RELIEF_CAMPAIGN_TYPE = "defi-united/relief-campaign";
 const PLEDGE_TYPE = "defi-united/pledge";
@@ -135,19 +139,28 @@ async function buildPublicCampaign(
     lastUpdateAt: lastUpdateAtFor(drive),
   };
 
-  // Live on-chain overlay (cached server-side) — best-effort, returns
-  // null on RPC failure or when no Alchemy URL is configured.
+  // Live on-chain overlay + recent transfers (cached server-side) —
+  // best-effort, returns null/[] on RPC failure or when no Alchemy URL
+  // is configured. Run in parallel since they hit the same backend.
   const overlayConfig = loadOverlayConfig();
   const treasury = drive.campaign.state.global.contributionAddresses?.[0];
-  const liveBalance = treasury
-    ? await fetchLiveBalance({
-        alchemyUrl: overlayConfig.alchemyUrl,
-        treasuryAddress: treasury.address,
-        ethPriceFallbackUsd: overlayConfig.ethPriceFallbackUsd,
-      })
-    : null;
+  const [liveBalance, recentOnchainTransfers] = treasury
+    ? await Promise.all([
+        fetchLiveBalance({
+          alchemyUrl: overlayConfig.alchemyUrl,
+          treasuryAddress: treasury.address,
+          ethPriceFallbackUsd: overlayConfig.ethPriceFallbackUsd,
+        }),
+        fetchRecentTransfers({
+          alchemyUrl: overlayConfig.alchemyUrl,
+          treasuryAddress: treasury.address,
+          ethPriceFallbackUsd: overlayConfig.ethPriceFallbackUsd,
+          limit: 25,
+        }),
+      ])
+    : [null, []];
 
-  return projectCampaign(bundle, liveBalance);
+  return projectCampaign(bundle, liveBalance, recentOnchainTransfers);
 }
 
 // Drive ID → campaign mapping, populated during onSetup
@@ -223,7 +236,9 @@ export const getResolvers = (
     },
   },
 
-  // Field resolver so `recentReceipts(limit: N)` slices server-side.
+  // Field resolvers so `recentReceipts(limit)` and
+  // `recentOnchainTransfers(limit)` slice server-side from the
+  // pre-fetched lists on the parent.
   DefiUnited_PublicCampaign: {
     recentReceipts: (
       parent: PublicCampaign,
@@ -231,6 +246,13 @@ export const getResolvers = (
     ): PublicReceiptEntry[] => {
       const limit = args.limit ?? 20;
       return parent.recentReceipts.slice(0, Math.max(0, limit));
+    },
+    recentOnchainTransfers: (
+      parent: PublicCampaign,
+      args: { limit?: number },
+    ): PublicReceiptEntry[] => {
+      const limit = args.limit ?? 25;
+      return parent.recentOnchainTransfers.slice(0, Math.max(0, limit));
     },
   },
 
