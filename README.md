@@ -19,6 +19,12 @@ A turn-key data layer for running a public, verifiable, multi-DAO relief coaliti
 - **An operations subgraph** gated by Renown DID bearer tokens for operator mutations
 - **A drive-level editor** (`campaign-operations`) that walks the operator through the full incident lifecycle in Connect
 
+## Federated by default
+
+The campaign drive isn't tied to a single Switchboard. Multiple DAOs can each run their own peer Switchboard, all mirroring the same drive — Aave writes to theirs, Mantle writes to theirs, both sync into the shared state, no single tenant is the source of truth. A Connect webapp is itself a peer node and can hold a local copy that syncs offline. Sync is a first-class drive concept (`ADD_LISTENER` / `ADD_TRIGGER` are ordinary operations on the drive document), so the sync topology is itself auditable and replayable.
+
+This is what lets a public observer reproduce every total without trusting anyone, lets the coalition survive any single tenant going offline, and removes the political bottleneck of "whose backend is canonical?". See [`docs/architecture.md#distributed-sync--drives-across-nodes`](docs/architecture.md#distributed-sync--drives-across-nodes) for the topology, convergence rules, and what runs per-node vs canonically.
+
 ## Architecture at a glance
 
 ```
