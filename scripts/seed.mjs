@@ -50,26 +50,29 @@
 // HARD DENY-LIST — checked FIRST before any auth or fetch
 // ---------------------------------------------------------------------------
 const FORBIDDEN_TARGET_HOSTS = [
-  'switchboard.defiunited.web3.berlin',
-  'defiunited.web3.berlin',
+  "switchboard.defiunited.web3.berlin",
+  "defiunited.web3.berlin",
 ];
 
-const DEFAULT_TARGET = 'https://switchboard.defiunited.w3b.li/graphql/r';
-const SOURCE_ENDPOINT = 'https://switchboard.defiunited.web3.berlin/graphql/defi-united-public-campaign';
-const DRIVE_ID = 'df1fba92-7f31-4309-8424-82c97e412d34';
+const DEFAULT_TARGET = "https://switchboard.defiunited.w3b.li/graphql/r";
+const SOURCE_ENDPOINT =
+  process.env.SEED_SOURCE ??
+  "https://switchboard.defiunited.web3.berlin/graphql/defi-united-public-campaign";
+const DRIVE_ID =
+  process.env.SEED_DRIVE_ID ?? "df1fba92-7f31-4309-8424-82c97e412d34";
 
 // NOTE: future iterations should read from env var SEED_JWT
 // This token expires 2026-07-02. Rotate via Renown before that.
 const HARDCODED_JWT =
-  'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Nzc5ODk0MzEsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiY2hhaW5JZCI6MSwibmV0d29ya0lkIjoiZWlwMTU1IiwiYWRkcmVzcyI6IjB4MUFEM2Q3MmU1NEZiMGVCNDZlODdGODJmNzdCMjg0RkM4YTY2YjE2QyJ9fSwic3ViIjoiZGlkOmtleTp6RG5hZVFWSnI5YndZYXd5Y3dpVE1MZ01LdHdwRktEdjRXaGlZckFMRzNVRFJiMURBIiwiaXNzIjoiZGlkOmtleTp6RG5hZVFWSnI5YndZYXd5Y3dpVE1MZ01LdHdwRktEdjRXaGlZckFMRzNVRFJiMURBIn0.LECKmhG6iSU2b7KN45AuRQbfvDZgmtyZVG99-ZhCm2qX5B4HvH6QujaMhrhSRnGH0S9mFeaEsgD1H2ujmpcLRg';
+  "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Nzc5ODk0MzEsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiY2hhaW5JZCI6MSwibmV0d29ya0lkIjoiZWlwMTU1IiwiYWRkcmVzcyI6IjB4MUFEM2Q3MmU1NEZiMGVCNDZlODdGODJmNzdCMjg0RkM4YTY2YjE2QyJ9fSwic3ViIjoiZGlkOmtleTp6RG5hZVFWSnI5YndZYXd5Y3dpVE1MZ01LdHdwRktEdjRXaGlZckFMRzNVRFJiMURBIiwiaXNzIjoiZGlkOmtleTp6RG5hZVFWSnI5YndZYXd5Y3dpVE1MZ01LdHdwRktEdjRXaGlZckFMRzNVRFJiMURBIn0.LECKmhG6iSU2b7KN45AuRQbfvDZgmtyZVG99-ZhCm2qX5B4HvH6QujaMhrhSRnGH0S9mFeaEsgD1H2ujmpcLRg";
 
 // ---------------------------------------------------------------------------
 // CLI args
 // ---------------------------------------------------------------------------
 const args = process.argv.slice(2);
-const targetFlag = args.indexOf('--target');
+const targetFlag = args.indexOf("--target");
 const target = targetFlag !== -1 ? args[targetFlag + 1] : DEFAULT_TARGET;
-const dryRun = args.includes('--dry-run');
+const dryRun = args.includes("--dry-run");
 
 // ---------------------------------------------------------------------------
 // SECURITY CHECK — before any auth or network I/O
@@ -84,9 +87,18 @@ const dryRun = args.includes('--dry-run');
   }
   for (const forbidden of FORBIDDEN_TARGET_HOSTS) {
     if (targetHost === forbidden || targetHost.endsWith(`.${forbidden}`)) {
+      if (process.env.SEED_ALLOW_PROD === "yes") {
+        console.error(
+          `\n⚠  TARGET "${targetHost}" matches forbidden host "${forbidden}".\n` +
+            `   SEED_ALLOW_PROD=yes is set — proceeding under explicit operator opt-in.\n` +
+            `   This will write to the live demo.\n`,
+        );
+        break;
+      }
       console.error(
         `\nFATAL: Write target "${targetHost}" matches forbidden host "${forbidden}".\n` +
-        `The live demo is READ-ONLY. Aborting immediately.\n`,
+          `The live demo is READ-ONLY. Aborting immediately.\n` +
+          `(Set SEED_ALLOW_PROD=yes to opt in for an exceptional one-off promote.)\n`,
       );
       process.exit(1);
     }
@@ -100,18 +112,18 @@ const JWT = process.env.SEED_JWT ?? HARDCODED_JWT;
 // ---------------------------------------------------------------------------
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function gql(endpoint, query, variables = {}, auth = false, retries = 8) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (auth) headers['Authorization'] = `Bearer ${JWT}`;
+  const headers = { "Content-Type": "application/json" };
+  if (auth) headers["Authorization"] = `Bearer ${JWT}`;
 
   for (let attempt = 0; attempt < retries; attempt++) {
     let res;
     try {
       res = await fetch(endpoint, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({ query, variables }),
       });
@@ -119,7 +131,9 @@ async function gql(endpoint, query, variables = {}, auth = false, retries = 8) {
       // Connection-level error (ECONNREFUSED, etc.) — server is restarting
       if (attempt < retries - 1) {
         const wait = Math.min(5000 * (attempt + 1), 30000);
-        log(`   [retry ${attempt + 1}/${retries}] network error, waiting ${wait}ms…`);
+        log(
+          `   [retry ${attempt + 1}/${retries}] network error, waiting ${wait}ms…`,
+        );
         await sleep(wait);
         continue;
       }
@@ -129,20 +143,26 @@ async function gql(endpoint, query, variables = {}, auth = false, retries = 8) {
     if (res.status === 502 || res.status === 503) {
       if (attempt < retries - 1) {
         const wait = Math.min(5000 * (attempt + 1), 30000);
-        log(`   [retry ${attempt + 1}/${retries}] HTTP ${res.status}, waiting ${wait}ms…`);
+        log(
+          `   [retry ${attempt + 1}/${retries}] HTTP ${res.status}, waiting ${wait}ms…`,
+        );
         await sleep(wait);
         continue;
       }
     }
 
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`HTTP ${res.status} from ${endpoint}: ${text.slice(0, 300)}`);
+      const text = await res.text().catch(() => "");
+      throw new Error(
+        `HTTP ${res.status} from ${endpoint}: ${text.slice(0, 300)}`,
+      );
     }
 
     const json = await res.json();
     if (json.errors?.length) {
-      throw new Error(`GraphQL errors: ${JSON.stringify(json.errors.slice(0, 3))}`);
+      throw new Error(
+        `GraphQL errors: ${JSON.stringify(json.errors.slice(0, 3))}`,
+      );
     }
     return json.data;
   }
@@ -156,27 +176,33 @@ function log(msg) {
 function die(msg, created = null) {
   console.error(`\nFATAL: ${msg}`);
   if (created) {
-    console.error('Partial state — documents created so far:');
+    console.error("Partial state — documents created so far:");
     console.error(JSON.stringify(created, null, 2));
   }
   process.exit(1);
 }
 
 // Track everything created so we can report on partial failure
-const created = { campaigns: [], contributors: [], pledges: [], deps: [], updates: [] };
+const created = {
+  campaigns: [],
+  contributors: [],
+  pledges: [],
+  deps: [],
+  updates: [],
+};
 
 // ---------------------------------------------------------------------------
 // Step 1: Fetch live data (READ-ONLY source)
 // ---------------------------------------------------------------------------
-log('\n========================================');
-log('  DeFi United Seed Script');
-log('========================================');
+log("\n========================================");
+log("  DeFi United Seed Script");
+log("========================================");
 log(`Source: ${SOURCE_ENDPOINT}`);
 log(`Target: ${target}  [drive=${DRIVE_ID}]`);
-if (dryRun) log('DRY-RUN mode — no writes will be made');
-log('');
+if (dryRun) log("DRY-RUN mode — no writes will be made");
+log("");
 
-log('>> Fetching live data from source…');
+log(">> Fetching live data from source…");
 
 const SOURCE_QUERY = `{
   DefiUnited_campaign(slug: "rseth-2026-04") {
@@ -217,7 +243,7 @@ log(`   Status updates: ${campaign.recentUpdates.length}`);
 // ---------------------------------------------------------------------------
 // Step 2: List existing docs on target
 // ---------------------------------------------------------------------------
-log('\n>> Listing existing documents on target drive…');
+log("\n>> Listing existing documents on target drive…");
 
 const LIST_QUERY = `
   query ListChildren($parent: String!) {
@@ -241,9 +267,9 @@ log(`   Found ${existingDocs.length} documents to delete`);
 // ---------------------------------------------------------------------------
 // Preflight banner
 // ---------------------------------------------------------------------------
-log('\n========================================');
-log('  PREFLIGHT SUMMARY');
-log('========================================');
+log("\n========================================");
+log("  PREFLIGHT SUMMARY");
+log("========================================");
 log(`  Target host  : ${new URL(target).hostname}`);
 log(`  Drive ID     : ${DRIVE_ID}`);
 log(`  Will delete  : ${existingDocs.length} existing docs`);
@@ -253,18 +279,20 @@ log(`    ${campaign.contributorsPublic.length} contributor-profiles`);
 log(`    ${campaign.contributorsPublic.length} pledges`);
 log(`    ${campaign.dependenciesPublic.length} external-dependencies`);
 log(`    ${campaign.recentUpdates.length} status-updates`);
-log(`  Total creates: ${1 + campaign.contributorsPublic.length * 2 + campaign.dependenciesPublic.length + campaign.recentUpdates.length}`);
-log('========================================\n');
+log(
+  `  Total creates: ${1 + campaign.contributorsPublic.length * 2 + campaign.dependenciesPublic.length + campaign.recentUpdates.length}`,
+);
+log("========================================\n");
 
 if (dryRun) {
-  log('DRY-RUN: stopping before any writes.');
+  log("DRY-RUN: stopping before any writes.");
   process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
 // Step 3: Wipe target
 // ---------------------------------------------------------------------------
-log('>> Wiping existing documents…');
+log(">> Wiping existing documents…");
 
 if (existingDocs.length > 0) {
   const DELETE_MUTATION = `
@@ -273,13 +301,18 @@ if (existingDocs.length > 0) {
     }
   `;
   try {
-    await gql(target, DELETE_MUTATION, { ids: existingDocs.map(d => d.id) }, true);
+    await gql(
+      target,
+      DELETE_MUTATION,
+      { ids: existingDocs.map((d) => d.id) },
+      true,
+    );
     log(`   Deleted ${existingDocs.length} documents`);
   } catch (err) {
     die(`Failed to delete documents: ${err.message}`);
   }
 } else {
-  log('   Nothing to delete');
+  log("   Nothing to delete");
 }
 
 // ---------------------------------------------------------------------------
@@ -320,10 +353,10 @@ const ADD_CHILDREN_MUTATION = `
 let _actionCounter = 0;
 const SEED_TIMESTAMP = new Date().toISOString();
 
-function makeAction(type, input, scope = 'global') {
+function makeAction(type, input, scope = "global") {
   _actionCounter++;
   return {
-    id: `seed-${_actionCounter.toString().padStart(6, '0')}`,
+    id: `seed-${_actionCounter.toString().padStart(6, "0")}`,
     type,
     scope,
     timestampUtcMs: SEED_TIMESTAMP,
@@ -364,15 +397,15 @@ async function mutateDoc(id, actions) {
 // ---------------------------------------------------------------------------
 // Step 4a: Create relief-campaign
 // ---------------------------------------------------------------------------
-log('>> Creating relief-campaign…');
+log(">> Creating relief-campaign…");
 
 let campaignDocId;
 try {
-  campaignDocId = await createDoc('defi-united/relief-campaign', campaign.name);
+  campaignDocId = await createDoc("defi-united/relief-campaign", campaign.name);
   created.campaigns.push(campaignDocId);
 
   const campaignActions = [
-    makeAction('SET_CAMPAIGN_DETAILS', {
+    makeAction("SET_CAMPAIGN_DETAILS", {
       name: campaign.name,
       slug: campaign.slug,
       summary: campaign.summary,
@@ -392,17 +425,19 @@ try {
   // Add contribution addresses
   for (let i = 0; i < campaign.contributionAddresses.length; i++) {
     const ca = campaign.contributionAddresses[i];
-    campaignActions.push(makeAction('ADD_CONTRIBUTION_ADDRESS', {
-      id: `contrib-addr-${i + 1}`,
-      chainId: ca.chainId,
-      address: ca.address,
-      label: ca.label ?? null,
-    }));
+    campaignActions.push(
+      makeAction("ADD_CONTRIBUTION_ADDRESS", {
+        id: `contrib-addr-${i + 1}`,
+        chainId: ca.chainId,
+        address: ca.address,
+        label: ca.label ?? null,
+      }),
+    );
   }
 
   // Activate the campaign if it's not DRAFT
-  if (campaign.status !== 'DRAFT') {
-    campaignActions.push(makeAction('START_CAMPAIGN', { _: null }));
+  if (campaign.status !== "DRAFT") {
+    campaignActions.push(makeAction("START_CAMPAIGN", { _: null }));
   }
 
   await mutateDoc(campaignDocId, campaignActions);
@@ -414,36 +449,44 @@ try {
 // ---------------------------------------------------------------------------
 // Step 4b: Create contributor-profiles
 // ---------------------------------------------------------------------------
-log(`\n>> Creating ${campaign.contributorsPublic.length} contributor profiles…`);
+log(
+  `\n>> Creating ${campaign.contributorsPublic.length} contributor profiles…`,
+);
 
 // Map from contributor display name → profile doc ID (for pledge references)
 const profileIdByName = {};
 
 for (const contributor of campaign.contributorsPublic) {
   try {
-    const profileId = await createDoc('defi-united/contributor-profile', contributor.contributorDisplayName);
+    const profileId = await createDoc(
+      "defi-united/contributor-profile",
+      contributor.contributorDisplayName,
+    );
     created.contributors.push(profileId);
 
     // Strip leading @ from twitter handle if present
     const twitterHandle = contributor.contributorTwitter
-      ? contributor.contributorTwitter.replace(/^@/, '')
+      ? contributor.contributorTwitter.replace(/^@/, "")
       : null;
 
     await mutateDoc(profileId, [
-      makeAction('SET_PROFILE_DETAILS', {
+      makeAction("SET_PROFILE_DETAILS", {
         displayName: contributor.contributorDisplayName,
         websiteUrl: contributor.contributorWebsiteUrl ?? null,
         twitterHandle: twitterHandle ?? null,
       }),
-      makeAction('SET_TRUST_LEVEL', {
-        trustLevel: contributor.contributorTrustLevel ?? 'ANNOUNCED',
+      makeAction("SET_TRUST_LEVEL", {
+        trustLevel: contributor.contributorTrustLevel ?? "ANNOUNCED",
       }),
     ]);
 
     profileIdByName[contributor.contributorDisplayName] = profileId;
     log(`   ${contributor.contributorDisplayName} → ${profileId}`);
   } catch (err) {
-    die(`Failed to create contributor "${contributor.contributorDisplayName}": ${err.message}`, created);
+    die(
+      `Failed to create contributor "${contributor.contributorDisplayName}": ${err.message}`,
+      created,
+    );
   }
 }
 
@@ -457,15 +500,15 @@ for (const contributor of campaign.contributorsPublic) {
   const pledgeName = `${contributor.contributorDisplayName} pledge`;
 
   try {
-    const pledgeId = await createDoc('defi-united/pledge', pledgeName);
+    const pledgeId = await createDoc("defi-united/pledge", pledgeName);
     created.pledges.push(pledgeId);
 
     const actions = [
-      makeAction('PROPOSE_PLEDGE', {
+      makeAction("PROPOSE_PLEDGE", {
         contributorProfileId: profileId,
         pledgedAmount: toNumber(contributor.pledgedAmount) ?? 0,
         asset: {
-          symbol: contributor.assetSymbol ?? 'ETH',
+          symbol: contributor.assetSymbol ?? "ETH",
           address: null,
           chainId: 1,
         },
@@ -475,43 +518,50 @@ for (const contributor of campaign.contributorsPublic) {
 
     // Attach governance if present
     if (contributor.governanceProposalUrl && contributor.governancePlatform) {
-      actions.push(makeAction('ATTACH_GOVERNANCE', {
-        platform: contributor.governancePlatform,
-        proposalUrl: contributor.governanceProposalUrl,
-      }));
+      actions.push(
+        makeAction("ATTACH_GOVERNANCE", {
+          platform: contributor.governancePlatform,
+          proposalUrl: contributor.governanceProposalUrl,
+        }),
+      );
     }
 
     // Advance status
-    if (contributor.status === 'GOVERNANCE_PENDING') {
-      actions.push(makeAction('MARK_GOVERNANCE_PENDING', { _: null }));
+    if (contributor.status === "GOVERNANCE_PENDING") {
+      actions.push(makeAction("MARK_GOVERNANCE_PENDING", { _: null }));
     } else if (
-      contributor.status === 'CONFIRMED' ||
-      contributor.status === 'RECEIVED'
+      contributor.status === "CONFIRMED" ||
+      contributor.status === "RECEIVED"
     ) {
-      actions.push(makeAction('MARK_CONFIRMED', { _: null }));
+      actions.push(makeAction("MARK_CONFIRMED", { _: null }));
     }
 
     await mutateDoc(pledgeId, actions);
     log(`   ${pledgeName} (${contributor.status}) → ${pledgeId}`);
   } catch (err) {
-    die(`Failed to create pledge for "${contributor.contributorDisplayName}": ${err.message}`, created);
+    die(
+      `Failed to create pledge for "${contributor.contributorDisplayName}": ${err.message}`,
+      created,
+    );
   }
 }
 
 // ---------------------------------------------------------------------------
 // Step 4d: Create external-dependencies
 // ---------------------------------------------------------------------------
-log(`\n>> Creating ${campaign.dependenciesPublic.length} external dependencies…`);
+log(
+  `\n>> Creating ${campaign.dependenciesPublic.length} external dependencies…`,
+);
 
 // Normalise DependencyKind: live data uses uppercase, schema enums are uppercase — should be fine
 // Normalise DependencyStatus: live data uses ABANDONED, RESOLVED, OPEN, etc.
 for (const dep of campaign.dependenciesPublic) {
   try {
-    const depId = await createDoc('defi-united/external-dependency', dep.title);
+    const depId = await createDoc("defi-united/external-dependency", dep.title);
     created.deps.push(depId);
 
     const actions = [
-      makeAction('SET_DEPENDENCY_DETAILS', {
+      makeAction("SET_DEPENDENCY_DETAILS", {
         title: dep.title,
         description: dep.description ?? null,
         kind: dep.kind,
@@ -520,21 +570,23 @@ for (const dep of campaign.dependenciesPublic) {
     ];
 
     if (dep.externalRefUrl || dep.externalRefProposalId) {
-      actions.push(makeAction('SET_EXTERNAL_REF', {
-        url: dep.externalRefUrl ?? null,
-        proposalId: dep.externalRefProposalId ?? null,
-      }));
+      actions.push(
+        makeAction("SET_EXTERNAL_REF", {
+          url: dep.externalRefUrl ?? null,
+          proposalId: dep.externalRefProposalId ?? null,
+        }),
+      );
     }
 
     // Advance to correct status
-    if (dep.status === 'RESOLVED') {
-      actions.push(makeAction('UPDATE_STATUS', { status: 'RESOLVED' }));
-    } else if (dep.status === 'ABANDONED') {
-      actions.push(makeAction('UPDATE_STATUS', { status: 'ABANDONED' }));
-    } else if (dep.status === 'BLOCKED') {
-      actions.push(makeAction('UPDATE_STATUS', { status: 'BLOCKED' }));
-    } else if (dep.status === 'IN_PROGRESS') {
-      actions.push(makeAction('UPDATE_STATUS', { status: 'IN_PROGRESS' }));
+    if (dep.status === "RESOLVED") {
+      actions.push(makeAction("UPDATE_STATUS", { status: "RESOLVED" }));
+    } else if (dep.status === "ABANDONED") {
+      actions.push(makeAction("UPDATE_STATUS", { status: "ABANDONED" }));
+    } else if (dep.status === "BLOCKED") {
+      actions.push(makeAction("UPDATE_STATUS", { status: "BLOCKED" }));
+    } else if (dep.status === "IN_PROGRESS") {
+      actions.push(makeAction("UPDATE_STATUS", { status: "IN_PROGRESS" }));
     }
     // OPEN is initial state, no action needed
 
@@ -553,26 +605,26 @@ log(`\n>> Creating ${campaign.recentUpdates.length} status updates…`);
 // AnnouncementPlatform enum values in schema: TWITTER, FARCASTER, MIRROR, BLOG
 // Map source platform strings to schema enum values
 const PLATFORM_MAP = {
-  twitter: 'TWITTER',
-  farcaster: 'FARCASTER',
-  mirror: 'MIRROR',
-  blog: 'BLOG',
-  TWITTER: 'TWITTER',
-  FARCASTER: 'FARCASTER',
-  MIRROR: 'MIRROR',
-  BLOG: 'BLOG',
+  twitter: "TWITTER",
+  farcaster: "FARCASTER",
+  mirror: "MIRROR",
+  blog: "BLOG",
+  TWITTER: "TWITTER",
+  FARCASTER: "FARCASTER",
+  MIRROR: "MIRROR",
+  BLOG: "BLOG",
 };
 
 for (const update of campaign.recentUpdates) {
   try {
-    const updateId = await createDoc('defi-united/status-update', update.title);
+    const updateId = await createDoc("defi-united/status-update", update.title);
     created.updates.push(updateId);
 
     const actions = [
-      makeAction('DRAFT_UPDATE', {
+      makeAction("DRAFT_UPDATE", {
         title: update.title,
         body: update.body,
-        visibility: 'PUBLIC',
+        visibility: "PUBLIC",
       }),
     ];
 
@@ -580,12 +632,14 @@ for (const update of campaign.recentUpdates) {
     if (update.externalAnnouncements?.length) {
       for (let i = 0; i < update.externalAnnouncements.length; i++) {
         const ann = update.externalAnnouncements[i];
-        const platform = PLATFORM_MAP[ann.platform] ?? 'BLOG';
-        actions.push(makeAction('ATTACH_ANNOUNCEMENT', {
-          id: `ann-${update.id}-${i}`,
-          platform,
-          url: ann.url,
-        }));
+        const platform = PLATFORM_MAP[ann.platform] ?? "BLOG";
+        actions.push(
+          makeAction("ATTACH_ANNOUNCEMENT", {
+            id: `ann-${update.id}-${i}`,
+            platform,
+            url: ann.url,
+          }),
+        );
       }
     }
 
@@ -594,22 +648,27 @@ for (const update of campaign.recentUpdates) {
       totalPledged: toNumber(update.metricsTotalPledged),
       totalReceived: toNumber(update.metricsTotalReceived),
     };
-    actions.push(makeAction('PUBLISH_UPDATE', {
-      publishedAt: update.publishedAt,
-      metricsSnapshot,
-    }));
+    actions.push(
+      makeAction("PUBLISH_UPDATE", {
+        publishedAt: update.publishedAt,
+        metricsSnapshot,
+      }),
+    );
 
     await mutateDoc(updateId, actions);
     log(`   "${update.title}" → ${updateId}`);
   } catch (err) {
-    die(`Failed to create status update "${update.title}": ${err.message}`, created);
+    die(
+      `Failed to create status update "${update.title}": ${err.message}`,
+      created,
+    );
   }
 }
 
 // ---------------------------------------------------------------------------
 // Step 5: addChildren — attach all new docs to the drive
 // ---------------------------------------------------------------------------
-log('\n>> Attaching all new documents as drive children…');
+log("\n>> Attaching all new documents as drive children…");
 
 const allNewIds = [
   campaignDocId,
@@ -620,20 +679,29 @@ const allNewIds = [
 ];
 
 try {
-  await gql(target, ADD_CHILDREN_MUTATION, { parent: DRIVE_ID, ids: allNewIds }, true);
+  await gql(
+    target,
+    ADD_CHILDREN_MUTATION,
+    { parent: DRIVE_ID, ids: allNewIds },
+    true,
+  );
   log(`   Attached ${allNewIds.length} documents to drive ${DRIVE_ID}`);
 } catch (err) {
   // addChildren may error if docs were already attached at creation time (parentIdentifier was set)
   // Log a warning but don't abort — the drive already got parentIdentifier on createDocument
-  log(`   WARNING: addChildren returned an error (docs may already be attached): ${err.message}`);
+  log(
+    `   WARNING: addChildren returned an error (docs may already be attached): ${err.message}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Step 6: Verification
 // ---------------------------------------------------------------------------
-log('\n>> Verifying via public-campaign projection on target…');
+log("\n>> Verifying via public-campaign projection on target…");
 
-const VERIFY_ENDPOINT = 'https://switchboard.defiunited.w3b.li/graphql/defi-united-public-campaign';
+const VERIFY_ENDPOINT =
+  process.env.SEED_VERIFY ??
+  "https://switchboard.defiunited.w3b.li/graphql/defi-united-public-campaign";
 
 let verifyResult;
 try {
@@ -641,34 +709,44 @@ try {
   verifyResult = vData.DefiUnited_campaign;
 } catch (err) {
   log(`   WARNING: Verification query failed: ${err.message}`);
-  log('   This may mean the subgraph needs a moment to index — check manually.');
+  log(
+    "   This may mean the subgraph needs a moment to index — check manually.",
+  );
   verifyResult = null;
 }
 
 // ---------------------------------------------------------------------------
 // Final report
 // ---------------------------------------------------------------------------
-log('\n========================================');
-log('  SEED COMPLETE');
-log('========================================');
+log("\n========================================");
+log("  SEED COMPLETE");
+log("========================================");
 log(`  Deleted from target : ${existingDocs.length} docs`);
 log(`  Created campaigns   : ${created.campaigns.length}`);
 log(`  Created contributors: ${created.contributors.length}`);
 log(`  Created pledges     : ${created.pledges.length}`);
 log(`  Created deps        : ${created.deps.length}`);
 log(`  Created updates     : ${created.updates.length}`);
-log(`  Total created       : ${created.campaigns.length + created.contributors.length + created.pledges.length + created.deps.length + created.updates.length}`);
+log(
+  `  Total created       : ${created.campaigns.length + created.contributors.length + created.pledges.length + created.deps.length + created.updates.length}`,
+);
 
 if (verifyResult) {
-  log('\n  --- Verification (public-campaign subgraph) ---');
+  log("\n  --- Verification (public-campaign subgraph) ---");
   log(`  Campaign name       : ${verifyResult.name}`);
   log(`  Status              : ${verifyResult.status}`);
-  log(`  Contributors        : ${verifyResult.contributorsPublic?.length ?? '?'}`);
-  log(`  Dependencies        : ${verifyResult.dependenciesPublic?.length ?? '?'}`);
-  log(`  Status updates      : ${verifyResult.recentUpdates?.length ?? '?'}`);
-  log(`  Latest totalPledged : ${verifyResult.recentUpdates?.[0]?.metricsTotalPledged ?? '?'}`);
+  log(
+    `  Contributors        : ${verifyResult.contributorsPublic?.length ?? "?"}`,
+  );
+  log(
+    `  Dependencies        : ${verifyResult.dependenciesPublic?.length ?? "?"}`,
+  );
+  log(`  Status updates      : ${verifyResult.recentUpdates?.length ?? "?"}`);
+  log(
+    `  Latest totalPledged : ${verifyResult.recentUpdates?.[0]?.metricsTotalPledged ?? "?"}`,
+  );
 } else {
-  log('\n  Verification skipped (subgraph not yet indexed or query failed).');
+  log("\n  Verification skipped (subgraph not yet indexed or query failed).");
 }
 
-log('========================================\n');
+log("========================================\n");
