@@ -272,21 +272,157 @@ export default function Editor(_props: EditorProps) {
         contributorProfiles,
         campaignStatus: campaign?.state.global.status ?? "DRAFT",
       }),
-    [pledges, receipts, dependencies, statusUpdates, contributorProfiles, campaign],
+    [
+      pledges,
+      receipts,
+      dependencies,
+      statusUpdates,
+      contributorProfiles,
+      campaign,
+    ],
   );
 
   const totalActivity = pledges.length + receipts.length + statusUpdates.length;
   const recentEvents = useMemo(
-    () => deriveActivity({ pledges, receipts, statusUpdates, contributorProfiles, limit: 10 }),
+    () =>
+      deriveActivity({
+        pledges,
+        receipts,
+        statusUpdates,
+        contributorProfiles,
+        limit: 10,
+      }),
     [pledges, receipts, statusUpdates, contributorProfiles],
   );
+
+  // Chart inputs
+  const totalPledged = useMemo(
+    () =>
+      pledges.reduce(
+        (s, p) => s + (Number(p.state.global.pledgedAmount) || 0),
+        0,
+      ),
+    [pledges],
+  );
+  const targetEth = Number(campaign?.state.global.targetAmount ?? 0) || 0;
+  const totalReceived = useMemo(
+    () =>
+      receipts
+        .filter((r) => r.state.global.reconciliationStatus !== "REORGED")
+        .reduce(
+          (s, r) => s + (Number(r.state.global.ethEquivalentAmount) || 0),
+          0,
+        ),
+    [receipts],
+  );
+  const raisedEth = totalPledged + totalReceived;
+  const usdLabel: string | null = null;
+  const ethLabel = `${raisedEth.toLocaleString(undefined, { maximumFractionDigits: 2 })} ETH`;
+
+  const funnelSegments = useMemo(() => {
+    const order = [
+      { status: "PROPOSED", color: "#9aa1ad" },
+      { status: "GOVERNANCE_PENDING", color: "#f59e0b" },
+      { status: "CONFIRMED", color: "#1a4dd6" },
+      { status: "RECEIVED", color: "#16a34a" },
+      { status: "CANCELLED+FAILED", color: "#dc2626" },
+    ];
+    return order.map((o) => {
+      const matches = pledges.filter((p) => {
+        if (o.status === "CANCELLED+FAILED")
+          return (
+            p.state.global.status === "CANCELLED" ||
+            p.state.global.status === "FAILED"
+          );
+        return p.state.global.status === o.status;
+      });
+      return {
+        status: o.status,
+        color: o.color,
+        amount: matches.reduce(
+          (s, p) => s + (Number(p.state.global.pledgedAmount) || 0),
+          0,
+        ),
+        count: matches.length,
+      };
+    });
+  }, [pledges]);
+
+  const cumulativeSeries = useMemo(() => {
+    const byDay: Record<string, number> = {};
+    for (const p of pledges) {
+      const day = (
+        p.header.createdAtUtcIso ||
+        p.header.lastModifiedAtUtcIso ||
+        ""
+      ).slice(0, 10);
+      if (!day) continue;
+      byDay[day] =
+        (byDay[day] ?? 0) + (Number(p.state.global.pledgedAmount) || 0);
+    }
+    const sorted = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b));
+    let acc = 0;
+    return sorted.map(([date, eth]) => {
+      acc += eth;
+      return { date, eth: acc };
+    });
+  }, [pledges]);
+
+  const topContribs = useMemo(() => {
+    return pledges
+      .filter((p) => Number(p.state.global.pledgedAmount) > 0)
+      .map((p) => {
+        const profile = contributorProfiles.find(
+          (c) => c.header.id === p.state.global.contributorProfileId,
+        );
+        return {
+          id: p.state.global.contributorProfileId ?? "",
+          name: profile?.state.global.displayName ?? "Unknown",
+          amount: Number(p.state.global.pledgedAmount) || 0,
+        };
+      })
+      .filter((c) => c.id)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
+  }, [pledges, contributorProfiles]);
+
+  const onchainBuckets = useMemo(() => {
+    const now = Date.now();
+    const arr: { count: number; eth: number }[] = Array.from(
+      { length: 24 },
+      () => ({ count: 0, eth: 0 }),
+    );
+    for (const r of receipts) {
+      if (r.state.global.reconciliationStatus === "REORGED") continue;
+      const tsIso =
+        r.state.global.blockTimestamp ?? r.header.lastModifiedAtUtcIso;
+      if (!tsIso) continue;
+      const ts = new Date(tsIso).getTime();
+      if (Number.isNaN(ts)) continue;
+      const hoursAgo = Math.floor((now - ts) / (3600 * 1000));
+      if (hoursAgo >= 0 && hoursAgo < 24) {
+        const idx = 23 - hoursAgo;
+        arr[idx].count += 1;
+        arr[idx].eth += Number(r.state.global.ethEquivalentAmount) || 0;
+      }
+    }
+    return arr.map((b, i) => ({ hour: i, count: b.count, eth: b.eth }));
+  }, [receipts]);
 
   const handlePrimaryAction = useCallback(
     (task: Task) => {
       if (task.pledgeId)
-        rightPaneState.open({ type: "pledge", id: task.pledgeId, mode: "edit" });
+        rightPaneState.open({
+          type: "pledge",
+          id: task.pledgeId,
+          mode: "edit",
+        });
       else if (task.dependencyId)
-        rightPaneState.open({ type: "dependency", id: task.dependencyId, mode: "edit" });
+        rightPaneState.open({
+          type: "dependency",
+          id: task.dependencyId,
+          mode: "edit",
+        });
       else if (task.kind === "NO_RECENT_UPDATE")
         rightPaneState.open({ type: "status-update", mode: "create" });
     },
@@ -411,6 +547,14 @@ export default function Editor(_props: EditorProps) {
         totalEventCount={totalActivity}
         rightPane={rightPaneState}
         onPrimaryAction={handlePrimaryAction}
+        raisedEth={raisedEth}
+        targetEth={targetEth}
+        usdLabel={usdLabel}
+        ethLabel={ethLabel}
+        funnelSegments={funnelSegments}
+        cumulativeSeries={cumulativeSeries}
+        topContribs={topContribs}
+        onchainBuckets={onchainBuckets}
       />
     ) : (
       <div style={{ padding: 16, color: "#6b7280", fontSize: 13 }}>
