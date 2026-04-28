@@ -53,7 +53,14 @@ async function loadDriveBundle(
   reactorClient: BaseSubgraph["reactorClient"],
   campaign: ReliefCampaignDocument,
 ): Promise<DriveBundle | null> {
-  const parents = await reactorClient.getParents(campaign.header.id);
+  // The reactor throws "Document not found" if `campaign` was just
+  // deleted between the time we picked it up and now. Treat as orphan.
+  let parents;
+  try {
+    parents = await reactorClient.getParents(campaign.header.id);
+  } catch {
+    return null;
+  }
   const drive = parents.results.at(0);
   if (!drive) return null;
   const driveId = drive.header.id;
@@ -304,7 +311,13 @@ export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
     type: RELIEF_CAMPAIGN_TYPE,
   });
   for (const campaign of all.results as ReliefCampaignDocument[]) {
-    const parents = await subgraph.reactorClient.getParents(campaign.header.id);
+    let parents;
+    try {
+      parents = await subgraph.reactorClient.getParents(campaign.header.id);
+    } catch {
+      // Campaign was deleted between the find() above and now. Skip.
+      continue;
+    }
     const drive = parents.results.at(0);
     if (drive) {
       driveToCampaign.set(drive.header.id, campaign);
@@ -319,8 +332,16 @@ export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
   ): Promise<void> => {
     const changedDocId = doc.header.id;
 
-    // Get the parent drive of the changed document
-    const parents = await subgraph.reactorClient.getParents(changedDocId);
+    // Get the parent drive of the changed document. The reactor throws
+    // "Document not found" if the change event is for a doc that was
+    // just deleted (DELETE_NODE) — handle as a no-op so the subscription
+    // loop survives the crash that would otherwise propagate.
+    let parents;
+    try {
+      parents = await subgraph.reactorClient.getParents(changedDocId);
+    } catch {
+      return;
+    }
     const drive = parents.results.at(0);
     if (!drive) return;
 
@@ -392,7 +413,16 @@ export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
       { type: docType },
       (event) => {
         for (const doc of event.documents) {
-          handleDocumentChange(docType, doc);
+          // Fire-and-forget — explicitly catch so an unexpected throw in
+          // the change handler can't become an unhandled rejection that
+          // crashes the reactor process. Errors here are non-fatal:
+          // the projection cache stays stale until the next event.
+          handleDocumentChange(docType, doc).catch((err) => {
+            console.error(
+              `[public-campaign] handleDocumentChange failed for ${docType} ${doc.header.id}:`,
+              err,
+            );
+          });
         }
       },
     );
