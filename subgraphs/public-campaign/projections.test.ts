@@ -4,6 +4,7 @@ import { utils as pledgeUtils } from "../../document-models/pledge/v1/index.js";
 import { utils as contribUtils } from "../../document-models/contributor-profile/v1/index.js";
 import { utils as depUtils } from "../../document-models/external-dependency/v1/index.js";
 import { utils as receiptUtils } from "../../document-models/onchain-receipt/v1/index.js";
+import type { ReconciliationStatus } from "../../document-models/onchain-receipt/v1/gen/schema/types.js";
 import { utils as updateUtils } from "../../document-models/status-update/v1/index.js";
 import type { CampaignBundle } from "./projections.js";
 import { projectCampaign } from "./projections.js";
@@ -304,5 +305,35 @@ describe("projectCampaign", () => {
     // No liveBalance overlay => ethPriceUsd unavailable => headlineTotalUsd must be null
     const result = projectCampaign(buildBundle());
     expect(result.headlineTotalUsd).toBeNull();
+  });
+
+  it("onchainEngagement counts non-REORGED transfers and unique senders", () => {
+    // Build a bundle with 4 receipts:
+    //   0xAAA MATCHED, 0xBBB MATCHED, 0xAAA MATCHED, 0xCCC REORGED
+    // Expected: totalTransferCount=3 (REORGED excluded), uniqueSenderCount=2 (0xAAA counted once)
+    const bundle = buildBundle();
+    const makeReceipt = (fromAddress: string, reconciliationStatus: ReconciliationStatus) => {
+      const r = receiptUtils.createDocument();
+      r.state.global.fromAddress = fromAddress;
+      r.state.global.reconciliationStatus = reconciliationStatus;
+      return r;
+    };
+    bundle.receipts = [
+      makeReceipt("0xAAA", "MATCHED"),
+      makeReceipt("0xBBB", "MATCHED"),
+      makeReceipt("0xAAA", "MATCHED"),
+      makeReceipt("0xCCC", "REORGED"),
+    ];
+    const result = projectCampaign(bundle);
+    expect(result.onchainEngagement.totalTransferCount).toBe(3);
+    expect(result.onchainEngagement.uniqueSenderCount).toBe(2);
+  });
+
+  it("onchainEngagement is zero when receipts array is empty", () => {
+    const bundle = buildBundle();
+    bundle.receipts = [];
+    const result = projectCampaign(bundle);
+    expect(result.onchainEngagement.totalTransferCount).toBe(0);
+    expect(result.onchainEngagement.uniqueSenderCount).toBe(0);
   });
 });

@@ -290,6 +290,20 @@ export function projectCampaign(
   const headlineTotalEthEquivalentValue =
     num(totalPledgedNum) + num(pendingReceiptsEthEquivalent);
 
+  const nonReorgedReceipts = bundle.receipts.filter((r) => {
+    const status = r.state.global.reconciliationStatus;
+    return status !== "REORGED";
+  });
+  const uniqueSenders = new Set<string>();
+  for (const r of nonReorgedReceipts) {
+    const from = r.state.global.fromAddress;
+    if (from) uniqueSenders.add(from.toLowerCase());
+  }
+  const onchainEngagement: OnchainEngagement = {
+    totalTransferCount: nonReorgedReceipts.length,
+    uniqueSenderCount: uniqueSenders.size,
+  };
+
   return {
     slug: c.slug,
     name: c.name,
@@ -331,5 +345,6 @@ export function projectCampaign(
         }
       : null,
     lastUpdateAt: bundle.lastUpdateAt,
+    onchainEngagement,
   };
 }
