@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import { validTransitions } from "../state/valid-transitions.js";
 
 describe("validTransitions", () => {
-  it("PROPOSED can go to GOVERNANCE_PENDING or CANCELLED", () => {
+  it("PROPOSED can go to GOVERNANCE_PENDING, CONFIRMED, or CANCELLED", () => {
     expect(validTransitions("PROPOSED", false)).toEqual([
       { to: "GOVERNANCE_PENDING", action: "markGovernancePending" },
+      { to: "CONFIRMED", action: "markConfirmed" },
       { to: "CANCELLED", action: "cancelPledge" },
     ]);
   });
@@ -21,7 +22,9 @@ describe("validTransitions", () => {
     const noReceipt = validTransitions("CONFIRMED", false);
     expect(noReceipt[0].to).toBe("RECEIVED");
     expect(noReceipt[0].disabled).toBe(true);
-    expect(noReceipt[0].disabledReason).toBe("No matching receipt attributed yet");
+    expect(noReceipt[0].disabledReason).toBe(
+      "No matching receipt attributed yet",
+    );
     expect(noReceipt[1]).toEqual({ to: "CANCELLED", action: "cancelPledge" });
 
     const hasReceipt = validTransitions("CONFIRMED", true);

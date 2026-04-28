@@ -28,6 +28,7 @@ export function validTransitions(
     case "PROPOSED":
       return [
         { to: "GOVERNANCE_PENDING", action: "markGovernancePending" },
+        { to: "CONFIRMED", action: "markConfirmed" },
         { to: "CANCELLED", action: "cancelPledge" },
       ];
     case "GOVERNANCE_PENDING":

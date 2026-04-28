@@ -114,35 +114,41 @@ function PledgeEditForm({
     );
   }
 
-  function handleTransition(action: string) {
-    switch (action) {
-      case "markGovernancePending":
-        void dispatchActions(markGovernancePending({}), pledgeId);
-        break;
-      case "markConfirmed":
-        void dispatchActions(markConfirmed({}), pledgeId);
-        break;
-      case "markReceived":
-        if (
-          !hasReceipt &&
-          !window.confirm("No receipt yet — really mark received?")
-        )
-          return;
-        void dispatchActions(
-          markReceived({
-            amount: gs.pledgedAmount ?? 0,
-            receiptId: "",
-            receivedAt: new Date().toISOString(),
-          }),
-          pledgeId,
-        );
-        break;
-      case "cancelPledge":
-        void dispatchActions(cancelPledge({}), pledgeId);
-        break;
-      case "failPledge":
-        void dispatchActions(failPledge({}), pledgeId);
-        break;
+  async function handleTransition(action: string) {
+    try {
+      switch (action) {
+        case "markGovernancePending":
+          await dispatchActions(markGovernancePending({}), pledgeId);
+          break;
+        case "markConfirmed":
+          await dispatchActions(markConfirmed({}), pledgeId);
+          break;
+        case "markReceived":
+          if (
+            !hasReceipt &&
+            !window.confirm("No receipt yet — really mark received?")
+          )
+            return;
+          await dispatchActions(
+            markReceived({
+              amount: gs.pledgedAmount ?? 0,
+              receiptId: "",
+              receivedAt: new Date().toISOString(),
+            }),
+            pledgeId,
+          );
+          break;
+        case "cancelPledge":
+          await dispatchActions(cancelPledge({}), pledgeId);
+          break;
+        case "failPledge":
+          await dispatchActions(failPledge({}), pledgeId);
+          break;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("Status transition failed:", e);
+      window.alert(`Status transition failed:\n\n${msg}`);
     }
   }
 
@@ -191,7 +197,9 @@ function PledgeEditForm({
                   className={`defi-united-ops__pf-transition-btn${t.disabled ? " --disabled" : ""}`}
                   disabled={t.disabled}
                   title={t.disabledReason}
-                  onClick={() => !t.disabled && handleTransition(t.action)}
+                  onClick={() => {
+                    if (!t.disabled) void handleTransition(t.action);
+                  }}
                 >
                   → {t.to}
                 </button>

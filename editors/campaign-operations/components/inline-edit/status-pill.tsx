@@ -75,7 +75,9 @@ export function StatusPill({
       }
       await dispatchActions(action, pledgeId);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       console.error("StatusPill dispatch failed:", e);
+      window.alert(`Status transition failed:\n\n${msg}`);
     } finally {
       setBusy(false);
       setOpen(false);
@@ -127,7 +129,10 @@ export function StatusPill({
             <button
               key={t.to}
               type="button"
-              onClick={() => !t.disabled && void dispatch(t.action, t.to)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!t.disabled) void dispatch(t.action, t.to);
+              }}
               disabled={t.disabled}
               title={t.disabledReason}
               style={{
