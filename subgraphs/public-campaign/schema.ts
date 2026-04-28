@@ -118,6 +118,32 @@ export const schema: DocumentNode = gql`
     externalLinks: [DefiUnited_PublicExternalLink!]!
     affectedAsset: DefiUnited_PublicAffectedAsset
     lastUpdateAt: String
+    """
+    ETH-denominated hero number combining pledged commitments with
+    on-chain inflows: totalPledged + pendingReceiptsEthEquivalent.
+    Matches the math defiunited.world surfaces.
+    """
+    headlineTotalEthEquivalent: String!
+    """
+    USD-denominated hero number — the prominently displayed figure
+    on defiunited.world. Computed as headlineTotalEthEquivalent
+    multiplied by onchainLiveBalance.ethPriceUsd. Null when no
+    Alchemy URL is configured (price unavailable).
+    """
+    headlineTotalUsd: String
+    """
+    Aggregate counters over the campaign's on-chain receipt history
+    (across whitelisted assets). Mirrors the "126k+ Transfers /
+    116k+ Wallets" counters defiunited.world surfaces.
+    """
+    onchainEngagement: DefiUnited_OnchainEngagement!
+  }
+
+  type DefiUnited_OnchainEngagement {
+    "Total inbound on-chain transfer count across all whitelisted assets, derived from non-REORGED receipt documents."
+    totalTransferCount: Int!
+    "Distinct sender addresses across the same receipt set."
+    uniqueSenderCount: Int!
   }
 
   type DefiUnited_OnchainLiveBalance {
