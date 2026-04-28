@@ -26,6 +26,9 @@ import type { StatusUpdateDocument } from "../../document-models/status-update/v
 import type { ContributorProfileDocument } from "../../document-models/contributor-profile/v1/gen/types.js";
 
 import { useRightPane } from "./state/use-right-pane.js";
+import { deriveTasks, type Task } from "./state/derive-tasks.js";
+import { deriveActivity } from "./state/derive-activity.js";
+import { DefaultView } from "./components/right-pane/default-view.js";
 import { TwoPaneShell } from "./components/two-pane-shell.js";
 import { editorConfig } from "./config.js";
 import { HeaderStrip } from "./components/header-strip.js";
@@ -258,6 +261,38 @@ export default function Editor(_props: EditorProps) {
     [contributorProfiles, searchQuery, statusFilter, pledges],
   );
 
+  const tasks = useMemo(
+    () =>
+      deriveTasks({
+        now: Date.now(),
+        pledges,
+        receipts,
+        dependencies,
+        statusUpdates,
+        contributorProfiles,
+        campaignStatus: campaign?.state.global.status ?? "DRAFT",
+      }),
+    [pledges, receipts, dependencies, statusUpdates, contributorProfiles, campaign],
+  );
+
+  const totalActivity = pledges.length + receipts.length + statusUpdates.length;
+  const recentEvents = useMemo(
+    () => deriveActivity({ pledges, receipts, statusUpdates, contributorProfiles, limit: 10 }),
+    [pledges, receipts, statusUpdates, contributorProfiles],
+  );
+
+  const handlePrimaryAction = useCallback(
+    (task: Task) => {
+      if (task.pledgeId)
+        rightPaneState.open({ type: "pledge", id: task.pledgeId, mode: "edit" });
+      else if (task.dependencyId)
+        rightPaneState.open({ type: "dependency", id: task.dependencyId, mode: "edit" });
+      else if (task.kind === "NO_RECENT_UPDATE")
+        rightPaneState.open({ type: "status-update", mode: "create" });
+    },
+    [rightPaneState],
+  );
+
   const leftPaneContent = (
     <div className="defi-united-ops__inner">
       {campaign ? (
@@ -368,11 +403,20 @@ export default function Editor(_props: EditorProps) {
     </div>
   );
 
-  const rightPaneContent = (
-    <div style={{ padding: 24, color: "#6b7280", fontSize: 14 }}>
-      Right pane (default view) — coming in next tasks.
-    </div>
-  );
+  const rightPaneContent =
+    rightPaneState.selectedItem == null ? (
+      <DefaultView
+        tasks={tasks}
+        events={recentEvents}
+        totalEventCount={totalActivity}
+        rightPane={rightPaneState}
+        onPrimaryAction={handlePrimaryAction}
+      />
+    ) : (
+      <div style={{ padding: 16, color: "#6b7280", fontSize: 13 }}>
+        Right-pane forms coming next.
+      </div>
+    );
 
   return (
     <div className="defi-united-ops" style={{ height: "100%" }}>
