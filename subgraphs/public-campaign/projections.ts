@@ -57,6 +57,9 @@ export interface PublicCampaign {
     chainId: number;
   } | null;
   lastUpdateAt: string | null;
+  headlineTotalEthEquivalent: string;
+  headlineTotalUsd: string | null;
+  onchainEngagement: OnchainEngagement;
 }
 
 export interface PublicReceiptEntry {
@@ -75,6 +78,11 @@ export interface PublicReceiptEntry {
   ethPriceUsdAtReceipt: number;
   reconciliationStatus: string;
   matchedPledgeId: string | null;
+}
+
+export interface OnchainEngagement {
+  totalTransferCount: number;
+  uniqueSenderCount: number;
 }
 
 export interface OnchainLiveBalance {
@@ -279,6 +287,9 @@ export function projectCampaign(
     pendingReceiptsEthEquivalent = pending > 0 ? str(pending) : "0";
   }
 
+  const headlineTotalEthEquivalentValue =
+    num(totalPledgedNum) + num(pendingReceiptsEthEquivalent);
+
   return {
     slug: c.slug,
     name: c.name,
@@ -296,6 +307,7 @@ export function projectCampaign(
     recentOnchainTransfers,
     onchainLiveBalance: liveBalance,
     pendingReceiptsEthEquivalent,
+    headlineTotalEthEquivalent: str(headlineTotalEthEquivalentValue),
     contributionAddresses: c.contributionAddresses.map((a) => ({
       chainId: a.chainId,
       address: a.address,

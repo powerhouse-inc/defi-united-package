@@ -268,4 +268,19 @@ describe("projectCampaign", () => {
       "https://snapshot.box/#/mantle.eth",
     );
   });
+
+  it("headlineTotalEthEquivalent = totalPledged + pendingReceiptsEthEquivalent", () => {
+    const bundle = buildBundle();
+    // buildBundle() has totalPledged = 35000 (30000 + 5000, excluding CANCELLED 1000)
+    // liveBalance.totalEthEquivalent = "200", totalReceived = 2.5
+    // => pendingReceiptsEthEquivalent = 200 - 2.5 = 197.5
+    // => headlineTotalEthEquivalent = 35000 + 197.5 = 35197.5
+    const result = projectCampaign(bundle, {
+      totalEthEquivalent: "200",
+      perAsset: [],
+      fetchedAt: "2026-04-28T00:00:00.000Z",
+      ethPriceUsd: 2000,
+    });
+    expect(result.headlineTotalEthEquivalent).toBe("35197.5");
+  });
 });
