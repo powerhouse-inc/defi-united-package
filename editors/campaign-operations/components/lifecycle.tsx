@@ -5,6 +5,8 @@ import {
 import { generateId, type Action } from "document-model";
 import { useState } from "react";
 
+import type { UseRightPaneResult } from "../state/use-right-pane.js";
+
 import {
   setCampaignDetails,
   startCampaign,
@@ -14,11 +16,6 @@ import {
   addContributionAddress,
 } from "../../../document-models/relief-campaign/v1/gen/creators.js";
 import { distributionPlanDocumentType } from "../../../document-models/distribution-plan/v1/gen/document-type.js";
-import { contributorProfileDocumentType } from "../../../document-models/contributor-profile/v1/gen/document-type.js";
-import { pledgeDocumentType } from "../../../document-models/pledge/v1/gen/document-type.js";
-import { externalDependencyDocumentType } from "../../../document-models/external-dependency/v1/gen/document-type.js";
-import { onchainReceiptDocumentType } from "../../../document-models/onchain-receipt/v1/gen/document-type.js";
-import { statusUpdateDocumentType } from "../../../document-models/status-update/v1/gen/document-type.js";
 
 import type { ReliefCampaignDocument } from "../../../document-models/relief-campaign/v1/gen/types.js";
 import type { DistributionPlanDocument } from "../../../document-models/distribution-plan/v1/gen/types.js";
@@ -504,43 +501,25 @@ function Field({
 
 /**
  * Quick action menu shown above the dashboard once a campaign is running.
- * One-click flows to spawn related documents (contributor / pledge / dep /
- * status update / receipt) into the same drive.
+ * Buttons open the right-pane create form for each document kind.
  */
 export function CampaignQuickActions({
   showCommunications,
+  rightPane,
 }: {
   showCommunications?: boolean;
+  rightPane: UseRightPaneResult;
 }) {
-  const actions = [
-    {
-      label: "+ Contributor",
-      type: contributorProfileDocumentType,
-      hint: "Org or individual",
-    },
-    {
-      label: "+ Pledge",
-      type: pledgeDocumentType,
-      hint: "Capture a new pledge",
-    },
-    {
-      label: "+ Dependency",
-      type: externalDependencyDocumentType,
-      hint: "DAO vote, council action, ext tx",
-    },
-    {
-      label: "+ Receipt",
-      type: onchainReceiptDocumentType,
-      hint: "Manual on-chain receipt",
-    },
+  const actions: Array<{
+    label: string;
+    docKind: "contributor" | "pledge" | "dependency" | "status-update";
+    hint: string;
+  }> = [
+    { label: "+ Contributor", docKind: "contributor", hint: "Org or individual" },
+    { label: "+ Pledge", docKind: "pledge", hint: "Capture a new pledge" },
+    { label: "+ Dependency", docKind: "dependency", hint: "DAO vote, council action, ext tx" },
     ...(showCommunications
-      ? [
-          {
-            label: "+ Status update",
-            type: statusUpdateDocumentType,
-            hint: "Public communication",
-          },
-        ]
+      ? [{ label: "+ Status update", docKind: "status-update" as const, hint: "Public communication" }]
       : []),
   ];
 
@@ -549,11 +528,11 @@ export function CampaignQuickActions({
       <span className="defi-united-ops__quick-actions-label">Quick add</span>
       {actions.map((a) => (
         <button
-          key={a.type}
+          key={a.docKind}
           type="button"
           className="defi-united-ops__quick-btn"
           title={a.hint}
-          onClick={() => showCreateDocumentModal(a.type)}
+          onClick={() => rightPane.open({ type: a.docKind, mode: "create" })}
         >
           {a.label}
         </button>

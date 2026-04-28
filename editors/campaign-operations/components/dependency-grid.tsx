@@ -10,6 +10,7 @@ import type { PledgeDocument } from "../../../document-models/pledge/v1/gen/type
 interface DependencyGridProps {
   dependencies: ExternalDependencyDocument[];
   pledges: PledgeDocument[];
+  onOpen?: (id: string) => void;
 }
 
 const STATUS_COLORS: Record<
@@ -35,7 +36,7 @@ function selectNode(nodeId: string) {
   setSelectedNode(nodeId);
 }
 
-export function DependencyGrid({ dependencies, pledges }: DependencyGridProps) {
+export function DependencyGrid({ dependencies, pledges, onOpen }: DependencyGridProps) {
   const pledgesMap = new Map(pledges.map((p) => [p.header.id, p]));
 
   function getPledgeLabel(pledgeId: string): string {
@@ -127,11 +128,15 @@ export function DependencyGrid({ dependencies, pledges }: DependencyGridProps) {
                   className="defi-united-ops__deps-row defi-united-ops__row-clickable"
                   role="button"
                   tabIndex={0}
-                  onClick={() => selectNode(dep.header.id)}
+                  onClick={() => {
+                    if (onOpen) onOpen(dep.header.id);
+                    else selectNode(dep.header.id);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      selectNode(dep.header.id);
+                      if (onOpen) onOpen(dep.header.id);
+                      else selectNode(dep.header.id);
                     }
                   }}
                 >

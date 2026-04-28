@@ -451,11 +451,11 @@ export default function Editor(_props: EditorProps) {
       ) : campaign.state.global.status === "DRAFT" ? (
         <>
           <CampaignSetupForm campaign={campaign} />
-          <CampaignQuickActions showCommunications={false} />
+          <CampaignQuickActions showCommunications={false} rightPane={rightPaneState} />
         </>
       ) : (
         <>
-          <CampaignQuickActions showCommunications />
+          <CampaignQuickActions showCommunications rightPane={rightPaneState} />
           <SearchFilter
             value={{ searchQuery, statusFilter }}
             onSearchChange={handleSearchChange}
@@ -484,6 +484,7 @@ export default function Editor(_props: EditorProps) {
                 <DependencyGrid
                   dependencies={filteredDependencies}
                   pledges={pledges}
+                  onOpen={(id) => rightPaneState.open({ type: "dependency", id, mode: "edit" })}
                 />
               </CollapsibleSection>
             </div>
@@ -537,6 +538,7 @@ export default function Editor(_props: EditorProps) {
                       (d) => d.state.global.status === "RESOLVED",
                     ).length
                   }
+                  onCreate={() => rightPaneState.open({ type: "status-update", mode: "create" })}
                 />
               </CollapsibleSection>
             </div>
