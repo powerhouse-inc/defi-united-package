@@ -30,6 +30,9 @@ import { deriveTasks, type Task } from "./state/derive-tasks.js";
 import { deriveActivity } from "./state/derive-activity.js";
 import { DefaultView } from "./components/right-pane/default-view.js";
 import { PledgeForm } from "./components/right-pane/forms/pledge-form.js";
+import { ContributorForm } from "./components/right-pane/forms/contributor-form.js";
+import { DependencyForm } from "./components/right-pane/forms/dependency-form.js";
+import { StatusUpdateForm } from "./components/right-pane/forms/status-update-form.js";
 import { TwoPaneShell } from "./components/two-pane-shell.js";
 import { editorConfig } from "./config.js";
 import { HeaderStrip } from "./components/header-strip.js";
@@ -576,9 +579,78 @@ export default function Editor(_props: EditorProps) {
         />
       );
     }
+    if (rightPaneState.selectedItem.type === "contributor") {
+      const item = rightPaneState.selectedItem;
+      const profile =
+        item.mode === "edit"
+          ? contributorProfiles.find(
+              (c) => c.header.id === (item as { id: string }).id,
+            )
+          : undefined;
+      return (
+        <ContributorForm
+          mode={item.mode}
+          profile={profile}
+          driveId={selectedDrive.header.id}
+          onClose={rightPaneState.close}
+        />
+      );
+    }
+    if (rightPaneState.selectedItem.type === "dependency") {
+      const item = rightPaneState.selectedItem;
+      const dep =
+        item.mode === "edit"
+          ? dependencies.find(
+              (d) => d.header.id === (item as { id: string }).id,
+            )
+          : undefined;
+      return (
+        <DependencyForm
+          mode={item.mode}
+          dependency={dep}
+          pledges={pledges}
+          contributorProfiles={contributorProfiles}
+          driveId={selectedDrive.header.id}
+          onClose={rightPaneState.close}
+        />
+      );
+    }
+    if (rightPaneState.selectedItem.type === "status-update") {
+      const item = rightPaneState.selectedItem;
+      const statusUpdate =
+        item.mode === "edit"
+          ? statusUpdates.find(
+              (u) => u.header.id === (item as { id: string }).id,
+            )
+          : undefined;
+      const totalPledgedSum = pledges.reduce(
+        (s, p) => s + (Number(p.state.global.pledgedAmount) || 0),
+        0,
+      );
+      const totalReceivedSum = receipts
+        .filter((r) => r.state.global.reconciliationStatus !== "REORGED")
+        .reduce(
+          (s, r) => s + (Number(r.state.global.ethEquivalentAmount) || 0),
+          0,
+        );
+      const depsResolvedCount = dependencies.filter(
+        (d) => d.state.global.status === "RESOLVED",
+      ).length;
+      return (
+        <StatusUpdateForm
+          mode={item.mode}
+          update={statusUpdate}
+          driveId={selectedDrive.header.id}
+          totalPledged={totalPledgedSum}
+          totalReceived={totalReceivedSum}
+          dependenciesResolved={depsResolvedCount}
+          onClose={rightPaneState.close}
+        />
+      );
+    }
     return (
       <div style={{ padding: 16, color: "#6b7280", fontSize: 13 }}>
-        Form for {rightPaneState.selectedItem.type} coming next.
+        Bulk add wizard coming.
       </div>
     );
   })();
