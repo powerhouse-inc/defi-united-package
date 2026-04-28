@@ -25,6 +25,8 @@ import type { DistributionPlanDocument } from "../../document-models/distributio
 import type { StatusUpdateDocument } from "../../document-models/status-update/v1/gen/types.js";
 import type { ContributorProfileDocument } from "../../document-models/contributor-profile/v1/gen/types.js";
 
+import { useRightPane } from "./state/use-right-pane.js";
+import { TwoPaneShell } from "./components/two-pane-shell.js";
 import { editorConfig } from "./config.js";
 import { HeaderStrip } from "./components/header-strip.js";
 import { PledgeBoard } from "./components/pledge-board.js";
@@ -74,6 +76,8 @@ export default function Editor(_props: EditorProps) {
 
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  const rightPaneState = useRightPane();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target;
@@ -91,14 +95,45 @@ export default function Editor(_props: EditorProps) {
       }
 
       if (e.key === "Escape") {
-        setShowShortcuts(false);
-        handleClearFilters();
+        if (rightPaneState.selectedItem) {
+          rightPaneState.close();
+        } else {
+          setShowShortcuts(false);
+          handleClearFilters();
+        }
         return;
       }
 
       if (e.key === "/") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("defi-united-focus-search"));
+        return;
+      }
+
+      // new create-form shortcuts
+      if (e.key === "n") {
+        e.preventDefault();
+        rightPaneState.open({ type: "pledge", mode: "create" });
+        return;
+      }
+      if (e.key === "c") {
+        e.preventDefault();
+        rightPaneState.open({ type: "contributor", mode: "create" });
+        return;
+      }
+      if (e.key === "d") {
+        e.preventDefault();
+        rightPaneState.open({ type: "dependency", mode: "create" });
+        return;
+      }
+      if (e.key === "u") {
+        e.preventDefault();
+        rightPaneState.open({ type: "status-update", mode: "create" });
+        return;
+      }
+      if (e.key === "b") {
+        e.preventDefault();
+        rightPaneState.open({ type: "bulk-add", mode: "wizard" });
         return;
       }
 
@@ -127,7 +162,7 @@ export default function Editor(_props: EditorProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleClearFilters]);
+  }, [handleClearFilters, rightPaneState]);
 
   const dispatchPledges = useCallback((documentId: string, action: Action) => {
     void dispatchActions(action, documentId);
@@ -223,120 +258,133 @@ export default function Editor(_props: EditorProps) {
     [contributorProfiles, searchQuery, statusFilter, pledges],
   );
 
+  const leftPaneContent = (
+    <div className="defi-united-ops__inner">
+      {campaign ? (
+        <LifecycleBanner campaign={campaign} distribution={distribution} />
+      ) : null}
+
+      <HeaderStrip
+        driveName={driveName}
+        campaign={campaign}
+        pledges={pledges}
+        receipts={receipts}
+      />
+
+      {!campaign ? (
+        <EmptyCampaignNotice />
+      ) : campaign.state.global.status === "DRAFT" ? (
+        <>
+          <CampaignSetupForm campaign={campaign} />
+          <CampaignQuickActions showCommunications={false} />
+        </>
+      ) : (
+        <>
+          <CampaignQuickActions showCommunications />
+          <SearchFilter
+            value={{ searchQuery, statusFilter }}
+            onSearchChange={handleSearchChange}
+            onStatusChange={handleStatusChange}
+            onClear={handleClearFilters}
+          />
+
+          <div data-panel-id="panel-pledges">
+            <PledgeBoard
+              pledges={filteredPledges}
+              contributorProfiles={filteredContributorProfiles}
+              dispatchPledges={dispatchPledges}
+              campaignTarget={campaign.state.global.targetAmount}
+            />
+          </div>
+
+          <div className="defi-united-ops__grid-2">
+            <div data-panel-id="panel-dependencies">
+              <CollapsibleSection
+                title="External dependencies"
+                isCollapsedByDefault={filteredDependencies.length === 0}
+              >
+                <DependencyGrid
+                  dependencies={filteredDependencies}
+                  pledges={pledges}
+                />
+              </CollapsibleSection>
+            </div>
+            <div data-panel-id="panel-receipts">
+              <CollapsibleSection
+                title="On-chain receipts"
+                isCollapsedByDefault={filteredReceipts.length === 0}
+              >
+                <ReceiptsFeed
+                  receipts={filteredReceipts}
+                  pledges={pledges}
+                  contributorProfiles={contributorProfiles}
+                />
+              </CollapsibleSection>
+            </div>
+          </div>
+
+          <div className="defi-united-ops__grid-2">
+            <div data-panel-id="panel-distribution">
+              <CollapsibleSection
+                title="Distribution plan"
+                isCollapsedByDefault={!distribution}
+              >
+                <DistributionPanel plan={distribution} />
+              </CollapsibleSection>
+            </div>
+            <div data-panel-id="panel-communications">
+              <CollapsibleSection
+                title="Public communications"
+                isCollapsedByDefault={
+                  filteredStatusUpdates.filter(
+                    (u) =>
+                      u.state.global.visibility === "PUBLIC" &&
+                      !!u.state.global.publishedAt,
+                  ).length === 0
+                }
+              >
+                <CommsTimeline
+                  filteredStatusUpdates={filteredStatusUpdates}
+                  driveId={selectedDrive.header.id}
+                  metricsTotalPledged={pledges.reduce(
+                    (sum, p) => sum + (p.state.global.pledgedAmount ?? 0),
+                    0,
+                  )}
+                  metricsTotalReceived={receipts.reduce(
+                    (sum, r) => sum + (r.state.global.amount ?? 0),
+                    0,
+                  )}
+                  metricsDependenciesResolved={
+                    dependencies.filter(
+                      (d) => d.state.global.status === "RESOLVED",
+                    ).length
+                  }
+                />
+              </CollapsibleSection>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const rightPaneContent = (
+    <div style={{ padding: 24, color: "#6b7280", fontSize: 14 }}>
+      Right pane (default view) — coming in next tasks.
+    </div>
+  );
+
   return (
     <div className="defi-united-ops" style={{ height: "100%" }}>
       <DocumentToolbar />
-      <div className="defi-united-ops__inner">
-        {campaign ? (
-          <LifecycleBanner campaign={campaign} distribution={distribution} />
-        ) : null}
-
-        <HeaderStrip
-          driveName={driveName}
-          campaign={campaign}
-          pledges={pledges}
-          receipts={receipts}
-        />
-
-        {!campaign ? (
-          <EmptyCampaignNotice />
-        ) : campaign.state.global.status === "DRAFT" ? (
-          <>
-            <CampaignSetupForm campaign={campaign} />
-            <CampaignQuickActions showCommunications={false} />
-          </>
-        ) : (
-          <>
-            <CampaignQuickActions showCommunications />
-            <SearchFilter
-              value={{ searchQuery, statusFilter }}
-              onSearchChange={handleSearchChange}
-              onStatusChange={handleStatusChange}
-              onClear={handleClearFilters}
-            />
-
-            <div data-panel-id="panel-pledges">
-              <PledgeBoard
-                pledges={filteredPledges}
-                contributorProfiles={filteredContributorProfiles}
-                dispatchPledges={dispatchPledges}
-                campaignTarget={campaign.state.global.targetAmount}
-              />
-            </div>
-
-            <div className="defi-united-ops__grid-2">
-              <div data-panel-id="panel-dependencies">
-                <CollapsibleSection
-                  title="External dependencies"
-                  isCollapsedByDefault={filteredDependencies.length === 0}
-                >
-                  <DependencyGrid
-                    dependencies={filteredDependencies}
-                    pledges={pledges}
-                  />
-                </CollapsibleSection>
-              </div>
-              <div data-panel-id="panel-receipts">
-                <CollapsibleSection
-                  title="On-chain receipts"
-                  isCollapsedByDefault={filteredReceipts.length === 0}
-                >
-                  <ReceiptsFeed
-                    receipts={filteredReceipts}
-                    pledges={pledges}
-                    contributorProfiles={contributorProfiles}
-                  />
-                </CollapsibleSection>
-              </div>
-            </div>
-
-            <div className="defi-united-ops__grid-2">
-              <div data-panel-id="panel-distribution">
-                <CollapsibleSection
-                  title="Distribution plan"
-                  isCollapsedByDefault={!distribution}
-                >
-                  <DistributionPanel plan={distribution} />
-                </CollapsibleSection>
-              </div>
-              <div data-panel-id="panel-communications">
-                <CollapsibleSection
-                  title="Public communications"
-                  isCollapsedByDefault={
-                    filteredStatusUpdates.filter(
-                      (u) =>
-                        u.state.global.visibility === "PUBLIC" &&
-                        !!u.state.global.publishedAt,
-                    ).length === 0
-                  }
-                >
-                  <CommsTimeline
-                    filteredStatusUpdates={filteredStatusUpdates}
-                    driveId={selectedDrive.header.id}
-                    metricsTotalPledged={pledges.reduce(
-                      (sum, p) => sum + (p.state.global.pledgedAmount ?? 0),
-                      0,
-                    )}
-                    metricsTotalReceived={receipts.reduce(
-                      (sum, r) => sum + (r.state.global.amount ?? 0),
-                      0,
-                    )}
-                    metricsDependenciesResolved={
-                      dependencies.filter(
-                        (d) => d.state.global.status === "RESOLVED",
-                      ).length
-                    }
-                  />
-                </CollapsibleSection>
-              </div>
-            </div>
-          </>
-        )}
-
-        {showShortcuts ? (
-          <KeyboardShortcutsTooltip onClose={() => setShowShortcuts(false)} />
-        ) : null}
-      </div>
+      <TwoPaneShell
+        leftPane={leftPaneContent}
+        rightPane={rightPaneContent}
+        rightPaneState={rightPaneState}
+      />
+      {showShortcuts ? (
+        <KeyboardShortcutsTooltip onClose={() => setShowShortcuts(false)} />
+      ) : null}
 
       <style>{`
         .defi-united-ops {
@@ -579,6 +627,26 @@ function KeyboardShortcutsTooltip({ onClose }: KeyboardShortcutsTooltipProps) {
           <div className="defi-united-ops__kbd-row">
             <kbd className="defi-united-ops__kbd">6</kbd>
             <span>Clear filters</span>
+          </div>
+          <div className="defi-united-ops__kbd-row">
+            <kbd className="defi-united-ops__kbd">n</kbd>
+            <span>+ Pledge</span>
+          </div>
+          <div className="defi-united-ops__kbd-row">
+            <kbd className="defi-united-ops__kbd">c</kbd>
+            <span>+ Contributor</span>
+          </div>
+          <div className="defi-united-ops__kbd-row">
+            <kbd className="defi-united-ops__kbd">d</kbd>
+            <span>+ Dependency</span>
+          </div>
+          <div className="defi-united-ops__kbd-row">
+            <kbd className="defi-united-ops__kbd">u</kbd>
+            <span>+ Status update</span>
+          </div>
+          <div className="defi-united-ops__kbd-row">
+            <kbd className="defi-united-ops__kbd">b</kbd>
+            <span>Bulk add</span>
           </div>
           <div className="defi-united-ops__kbd-row">
             <kbd className="defi-united-ops__kbd">Esc</kbd>
