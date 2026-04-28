@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  addDocument,
-  dispatchActions,
-} from "@powerhousedao/reactor-browser";
+import { addDocument, dispatchActions } from "@powerhousedao/reactor-browser";
 import type { Action } from "document-model";
 import type { ExternalDependencyDocument } from "../../../../../document-models/external-dependency/v1/gen/types.js";
 import type { PledgeDocument } from "../../../../../document-models/pledge/v1/gen/types.js";
@@ -11,9 +8,14 @@ import { externalDependencyDocumentType } from "../../../../../document-models/e
 import {
   setDependencyDetails,
   linkPledge,
+  unlinkPledge,
+  updateStatus,
   setExternalRef,
 } from "../../../../../document-models/external-dependency/v1/gen/tracking/creators.js";
-import type { DependencyKind } from "../../../../../document-models/external-dependency/v1/gen/types.js";
+import type {
+  DependencyKind,
+  DependencyStatus,
+} from "../../../../../document-models/external-dependency/v1/gen/types.js";
 import { RightPaneShell } from "./right-pane-shell.js";
 
 interface DependencyFormProps {
@@ -32,43 +34,231 @@ export function DependencyForm({
   driveId,
   onClose,
 }: DependencyFormProps) {
-  if (mode === "edit") {
+  if (mode === "edit" && dependency) {
     return (
-      <RightPaneShell title="Edit dependency" onClose={onClose}>
-        <div
-          style={{
-            padding: 24,
-            color: "#6b7280",
-            fontSize: 13,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.4 }}>✏️</div>
-          <div style={{ fontWeight: 600, color: "#0f1115", marginBottom: 4 }}>
-            Edit mode coming soon
-          </div>
-          <div>Full dependency editing functionality lands in the next task.</div>
-          {dependency && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "#f7f8fa",
-                borderRadius: 6,
-                fontSize: 11,
-                color: "#9aa1ad",
-              }}
-            >
-              Dependency ID: {dependency.header.id}
-            </div>
-          )}
-        </div>
-      </RightPaneShell>
+      <DependencyEditForm
+        dependency={dependency}
+        pledges={pledges}
+        onClose={onClose}
+      />
     );
   }
 
   return (
-    <DependencyCreateForm pledges={pledges} driveId={driveId} onClose={onClose} />
+    <DependencyCreateForm
+      pledges={pledges}
+      driveId={driveId}
+      onClose={onClose}
+    />
+  );
+}
+
+interface DependencyEditFormProps {
+  dependency: ExternalDependencyDocument;
+  pledges: PledgeDocument[];
+  onClose: () => void;
+}
+
+function DependencyEditForm({
+  dependency,
+  pledges,
+  onClose,
+}: DependencyEditFormProps) {
+  const gs = dependency.state.global;
+  const depId = dependency.header.id;
+
+  const [title, setTitle] = useState(gs.title);
+  const [description, setDescription] = useState(gs.description ?? "");
+  const [kind, setKind] = useState<DependencyKind>(gs.kind);
+  const [status, setStatus] = useState<DependencyStatus>(gs.status);
+  const [expectedResolution, setExpectedResolution] = useState(
+    gs.expectedResolution ? gs.expectedResolution.slice(0, 10) : "",
+  );
+  const [refUrl, setRefUrl] = useState(gs.externalRef?.url ?? "");
+  const [refTxHash, setRefTxHash] = useState(gs.externalRef?.txHash ?? "");
+  const [refProposalId, setRefProposalId] = useState(
+    gs.externalRef?.proposalId ?? "",
+  );
+
+  const linkedPledgeIds = new Set(gs.blocks);
+
+  function saveDependencyField(
+    field: Partial<{
+      title: string;
+      description: string;
+      kind: DependencyKind;
+      expectedResolution: string;
+    }>,
+  ) {
+    void dispatchActions(setDependencyDetails(field), depId);
+  }
+
+  function saveExternalRef() {
+    void dispatchActions(
+      setExternalRef({
+        url: refUrl || undefined,
+        txHash: refTxHash || undefined,
+        proposalId: refProposalId || undefined,
+      }),
+      depId,
+    );
+  }
+
+  function togglePledgeLink(pledgeId: string, linked: boolean) {
+    if (linked) {
+      void dispatchActions(unlinkPledge({ pledgeId }), depId);
+    } else {
+      void dispatchActions(linkPledge({ pledgeId }), depId);
+    }
+  }
+
+  return (
+    <RightPaneShell title="Edit dependency" onClose={onClose}>
+      <div className="defi-united-ops__pf">
+        <Field label="Title" required>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => {
+              if (title.trim().length >= 2)
+                saveDependencyField({ title: title.trim() });
+            }}
+          />
+        </Field>
+
+        <Field label="Description">
+          <textarea
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={() =>
+              saveDependencyField({ description: description || undefined })
+            }
+          />
+        </Field>
+
+        <div className="defi-united-ops__pf-row2">
+          <Field label="Kind">
+            <select
+              value={kind}
+              onChange={(e) => {
+                const v = e.target.value as DependencyKind;
+                setKind(v);
+                saveDependencyField({ kind: v });
+              }}
+            >
+              <option value="GOVERNANCE_VOTE">GOVERNANCE_VOTE</option>
+              <option value="COUNCIL_ACTION">COUNCIL_ACTION</option>
+              <option value="ONCHAIN_TX">ONCHAIN_TX</option>
+              <option value="OPERATIONAL">OPERATIONAL</option>
+              <option value="OTHER">OTHER</option>
+            </select>
+          </Field>
+
+          <Field label="Status">
+            <select
+              value={status}
+              onChange={(e) => {
+                const v = e.target.value as DependencyStatus;
+                setStatus(v);
+                void dispatchActions(updateStatus({ status: v }), depId);
+              }}
+            >
+              <option value="OPEN">OPEN</option>
+              <option value="IN_PROGRESS">IN_PROGRESS</option>
+              <option value="BLOCKED">BLOCKED</option>
+              <option value="RESOLVED">RESOLVED</option>
+              <option value="ABANDONED">ABANDONED</option>
+            </select>
+          </Field>
+        </div>
+
+        <Field label="Expected resolution">
+          <input
+            type="date"
+            value={expectedResolution}
+            onChange={(e) => setExpectedResolution(e.target.value)}
+            onBlur={() =>
+              saveDependencyField({
+                expectedResolution: expectedResolution
+                  ? new Date(expectedResolution).toISOString()
+                  : undefined,
+              })
+            }
+          />
+        </Field>
+
+        {pledges.length > 0 ? (
+          <fieldset className="defi-united-ops__pf-fieldset">
+            <legend className="defi-united-ops__pf-label">
+              Blocks pledges
+            </legend>
+            <div className="defi-united-ops__pf-checkgroup">
+              {pledges.map((p) => {
+                const pledgeName =
+                  p.header.name || `Pledge ${p.header.id.slice(0, 8)}`;
+                const linked = linkedPledgeIds.has(p.header.id);
+                return (
+                  <label
+                    key={p.header.id}
+                    className="defi-united-ops__pf-check"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={linked}
+                      onChange={() => togglePledgeLink(p.header.id, linked)}
+                    />
+                    <span>{pledgeName}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : null}
+
+        <details>
+          <summary>External reference (optional)</summary>
+          <div
+            style={{
+              paddingTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <Field label="URL">
+              <input
+                type="url"
+                value={refUrl}
+                onChange={(e) => setRefUrl(e.target.value)}
+                onBlur={saveExternalRef}
+                placeholder="https://snapshot.org/..."
+              />
+            </Field>
+            <Field label="Tx hash">
+              <input
+                type="text"
+                value={refTxHash}
+                onChange={(e) => setRefTxHash(e.target.value)}
+                onBlur={saveExternalRef}
+                placeholder="0x..."
+              />
+            </Field>
+            <Field label="Proposal ID">
+              <input
+                type="text"
+                value={refProposalId}
+                onChange={(e) => setRefProposalId(e.target.value)}
+                onBlur={saveExternalRef}
+                placeholder="AIP-123"
+              />
+            </Field>
+          </div>
+        </details>
+      </div>
+      <Styles />
+    </RightPaneShell>
   );
 }
 
@@ -78,7 +268,11 @@ interface DependencyCreateFormProps {
   onClose: () => void;
 }
 
-function DependencyCreateForm({ pledges, driveId, onClose }: DependencyCreateFormProps) {
+function DependencyCreateForm({
+  pledges,
+  driveId,
+  onClose,
+}: DependencyCreateFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [kind, setKind] = useState<DependencyKind>("GOVERNANCE_VOTE");
@@ -152,9 +346,7 @@ function DependencyCreateForm({ pledges, driveId, onClose }: DependencyCreateFor
       busy={busy}
     >
       <div className="defi-united-ops__pf">
-        {err ? (
-          <div className="defi-united-ops__pf-error">{err}</div>
-        ) : null}
+        {err ? <div className="defi-united-ops__pf-error">{err}</div> : null}
 
         <Field label="Title" required>
           <input
@@ -206,8 +398,7 @@ function DependencyCreateForm({ pledges, driveId, onClose }: DependencyCreateFor
             <div className="defi-united-ops__pf-checkgroup">
               {pledges.map((p) => {
                 const pledgeName =
-                  p.header.name ||
-                  `Pledge ${p.header.id.slice(0, 8)}`;
+                  p.header.name || `Pledge ${p.header.id.slice(0, 8)}`;
                 return (
                   <label
                     key={p.header.id}
@@ -228,7 +419,14 @@ function DependencyCreateForm({ pledges, driveId, onClose }: DependencyCreateFor
 
         <details>
           <summary>External reference (optional)</summary>
-          <div style={{ paddingTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            style={{
+              paddingTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
             <Field label="URL">
               <input
                 type="url"
@@ -273,8 +471,7 @@ function Field({
   return (
     <label className="defi-united-ops__pf-field">
       <span className="defi-united-ops__pf-label">
-        {label}{" "}
-        {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
+        {label} {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
       </span>
       {children}
     </label>

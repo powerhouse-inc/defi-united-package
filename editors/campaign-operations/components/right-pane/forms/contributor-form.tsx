@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  addDocument,
-  dispatchActions,
-} from "@powerhousedao/reactor-browser";
+import { addDocument, dispatchActions } from "@powerhousedao/reactor-browser";
 import type { Action } from "document-model";
 import type { ContributorProfileDocument } from "../../../../../document-models/contributor-profile/v1/gen/types.js";
 import { contributorProfileDocumentType } from "../../../../../document-models/contributor-profile/v1/gen/document-type.js";
@@ -29,42 +26,117 @@ export function ContributorForm({
   driveId,
   onClose,
 }: ContributorFormProps) {
-  if (mode === "edit") {
-    return (
-      <RightPaneShell title="Edit contributor" onClose={onClose}>
-        <div
-          style={{
-            padding: 24,
-            color: "#6b7280",
-            fontSize: 13,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.4 }}>✏️</div>
-          <div style={{ fontWeight: 600, color: "#0f1115", marginBottom: 4 }}>
-            Edit mode coming soon
-          </div>
-          <div>Full contributor editing functionality lands in the next task.</div>
-          {profile && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "#f7f8fa",
-                borderRadius: 6,
-                fontSize: 11,
-                color: "#9aa1ad",
-              }}
-            >
-              Profile ID: {profile.header.id}
-            </div>
-          )}
-        </div>
-      </RightPaneShell>
-    );
+  if (mode === "edit" && profile) {
+    return <ContributorEditForm profile={profile} onClose={onClose} />;
   }
 
   return <ContributorCreateForm driveId={driveId} onClose={onClose} />;
+}
+
+interface ContributorEditFormProps {
+  profile: ContributorProfileDocument;
+  onClose: () => void;
+}
+
+function ContributorEditForm({ profile, onClose }: ContributorEditFormProps) {
+  const gs = profile.state.global;
+  const profileId = profile.header.id;
+
+  const [displayName, setDisplayName] = useState(gs.displayName);
+  const [kind, setKind] = useState<ContributorKind>(gs.kind);
+  const [trustLevel, setTrustLevelState] = useState<TrustLevel>(gs.trustLevel);
+  const [websiteUrl, setWebsiteUrl] = useState(gs.websiteUrl ?? "");
+  const [twitterHandle, setTwitterHandle] = useState(gs.twitterHandle ?? "");
+
+  function saveProfileField(field: {
+    displayName?: string;
+    kind?: ContributorKind;
+    websiteUrl?: string;
+    twitterHandle?: string;
+  }) {
+    void dispatchActions(setProfileDetails(field), profileId);
+  }
+
+  function saveTrustLevel(value: TrustLevel) {
+    void dispatchActions(setTrustLevel({ trustLevel: value }), profileId);
+  }
+
+  return (
+    <RightPaneShell title="Edit contributor" onClose={onClose}>
+      <div className="defi-united-ops__pf">
+        <Field label="Display name" required>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            onBlur={() => {
+              if (displayName.trim().length >= 2)
+                saveProfileField({ displayName: displayName.trim() });
+            }}
+            placeholder="e.g. Aave DAO"
+          />
+        </Field>
+
+        <div className="defi-united-ops__pf-row2">
+          <Field label="Kind">
+            <select
+              value={kind}
+              onChange={(e) => {
+                const v = e.target.value as ContributorKind;
+                setKind(v);
+                saveProfileField({ kind: v });
+              }}
+            >
+              <option value="DAO">DAO</option>
+              <option value="FOUNDATION">FOUNDATION</option>
+              <option value="COMPANY">COMPANY</option>
+              <option value="INDIVIDUAL">INDIVIDUAL</option>
+            </select>
+          </Field>
+
+          <Field label="Trust level">
+            <select
+              value={trustLevel}
+              onChange={(e) => {
+                const v = e.target.value as TrustLevel;
+                setTrustLevelState(v);
+                saveTrustLevel(v);
+              }}
+            >
+              <option value="VERIFIED">VERIFIED</option>
+              <option value="ANNOUNCED">ANNOUNCED</option>
+              <option value="ANONYMOUS">ANONYMOUS</option>
+            </select>
+          </Field>
+        </div>
+
+        <Field label="Website URL">
+          <input
+            type="url"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+            onBlur={() =>
+              saveProfileField({ websiteUrl: websiteUrl || undefined })
+            }
+            placeholder="https://example.org"
+          />
+        </Field>
+
+        <Field label="Twitter / X handle">
+          <input
+            type="text"
+            value={twitterHandle}
+            onChange={(e) => setTwitterHandle(e.target.value)}
+            onBlur={() =>
+              saveProfileField({ twitterHandle: twitterHandle || undefined })
+            }
+            placeholder="@handle"
+          />
+        </Field>
+      </div>
+      <Styles />
+    </RightPaneShell>
+  );
 }
 
 interface ContributorCreateFormProps {
@@ -72,7 +144,10 @@ interface ContributorCreateFormProps {
   onClose: () => void;
 }
 
-function ContributorCreateForm({ driveId, onClose }: ContributorCreateFormProps) {
+function ContributorCreateForm({
+  driveId,
+  onClose,
+}: ContributorCreateFormProps) {
   const [displayName, setDisplayName] = useState("");
   const [kind, setKind] = useState<ContributorKind>("DAO");
   const [trustLevel, setTrustLevelState] = useState<TrustLevel>("VERIFIED");
@@ -123,9 +198,7 @@ function ContributorCreateForm({ driveId, onClose }: ContributorCreateFormProps)
       busy={busy}
     >
       <div className="defi-united-ops__pf">
-        {err ? (
-          <div className="defi-united-ops__pf-error">{err}</div>
-        ) : null}
+        {err ? <div className="defi-united-ops__pf-error">{err}</div> : null}
 
         <Field label="Display name" required>
           <input
@@ -197,8 +270,7 @@ function Field({
   return (
     <label className="defi-united-ops__pf-field">
       <span className="defi-united-ops__pf-label">
-        {label}{" "}
-        {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
+        {label} {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
       </span>
       {children}
     </label>

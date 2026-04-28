@@ -1,14 +1,12 @@
 import { useState } from "react";
-import {
-  addDocument,
-  dispatchActions,
-} from "@powerhousedao/reactor-browser";
+import { addDocument, dispatchActions } from "@powerhousedao/reactor-browser";
 import { generateId } from "document-model";
 import type { Action } from "document-model";
 import type { StatusUpdateDocument } from "../../../../../document-models/status-update/v1/gen/types.js";
 import { statusUpdateDocumentType } from "../../../../../document-models/status-update/v1/gen/document-type.js";
 import {
   draftUpdate,
+  editUpdate,
   publishUpdate,
   setVisibility,
   attachAnnouncement,
@@ -44,39 +42,8 @@ export function StatusUpdateForm({
   dependenciesResolved,
   onClose,
 }: StatusUpdateFormProps) {
-  if (mode === "edit") {
-    return (
-      <RightPaneShell title="Edit status update" onClose={onClose}>
-        <div
-          style={{
-            padding: 24,
-            color: "#6b7280",
-            fontSize: 13,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.4 }}>✏️</div>
-          <div style={{ fontWeight: 600, color: "#0f1115", marginBottom: 4 }}>
-            Edit mode coming soon
-          </div>
-          <div>Full status-update editing functionality lands in the next task.</div>
-          {update && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "#f7f8fa",
-                borderRadius: 6,
-                fontSize: 11,
-                color: "#9aa1ad",
-              }}
-            >
-              Update ID: {update.header.id}
-            </div>
-          )}
-        </div>
-      </RightPaneShell>
-    );
+  if (mode === "edit" && update) {
+    return <StatusUpdateEditForm update={update} onClose={onClose} />;
   }
 
   return (
@@ -87,6 +54,159 @@ export function StatusUpdateForm({
       dependenciesResolved={dependenciesResolved}
       onClose={onClose}
     />
+  );
+}
+
+interface StatusUpdateEditFormProps {
+  update: StatusUpdateDocument;
+  onClose: () => void;
+}
+
+function StatusUpdateEditForm({ update, onClose }: StatusUpdateEditFormProps) {
+  const gs = update.state.global;
+  const updateId = update.header.id;
+
+  const [title, setTitle] = useState(gs.title);
+  const [body, setBody] = useState(gs.body);
+  const [visibility, setVisibilityState] = useState<UpdateVisibility>(
+    gs.visibility,
+  );
+  const [newAnnPlatform, setNewAnnPlatform] =
+    useState<AnnouncementPlatform>("TWITTER");
+  const [newAnnUrl, setNewAnnUrl] = useState("");
+
+  function saveContent() {
+    if (title.trim() && body.trim()) {
+      void dispatchActions(
+        editUpdate({ title: title.trim(), body: body.trim() }),
+        updateId,
+      );
+    }
+  }
+
+  function saveVisibility(v: UpdateVisibility) {
+    void dispatchActions(setVisibility({ visibility: v }), updateId);
+  }
+
+  function addNewAnnouncement() {
+    if (!newAnnUrl.trim()) return;
+    void dispatchActions(
+      attachAnnouncement({
+        id: generateId(),
+        platform: newAnnPlatform,
+        url: newAnnUrl.trim(),
+      }),
+      updateId,
+    );
+    setNewAnnUrl("");
+  }
+
+  return (
+    <RightPaneShell title="Edit status update" onClose={onClose}>
+      <div className="defi-united-ops__pf">
+        <Field label="Title" required>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={saveContent}
+          />
+        </Field>
+
+        <Field label="Body" required>
+          <textarea
+            rows={6}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onBlur={saveContent}
+          />
+        </Field>
+
+        <Field label="Visibility">
+          <select
+            value={visibility}
+            onChange={(e) => {
+              const v = e.target.value as UpdateVisibility;
+              setVisibilityState(v);
+              saveVisibility(v);
+            }}
+          >
+            <option value="PUBLIC">PUBLIC</option>
+            <option value="CONTRIBUTORS_ONLY">CONTRIBUTORS_ONLY</option>
+            <option value="INTERNAL">INTERNAL</option>
+          </select>
+        </Field>
+
+        {/* Existing announcements — read only (no remove action) */}
+        {gs.externalAnnouncements.length > 0 ? (
+          <div className="defi-united-ops__pf-announcements">
+            <span className="defi-united-ops__pf-label">
+              Existing announcements
+            </span>
+            {gs.externalAnnouncements.map((a) => (
+              <div key={a.id} className="defi-united-ops__pf-ann-row">
+                <span
+                  className="defi-united-ops__pf-ann-platform"
+                  style={{
+                    flex: "0 0 140px",
+                    padding: "7px 8px",
+                    fontSize: 13,
+                    border: "1px solid #e6e8ec",
+                    borderRadius: 6,
+                    background: "#f7f8fa",
+                    color: "#525a6b",
+                    boxSizing: "border-box" as const,
+                  }}
+                >
+                  {a.platform}
+                </span>
+                <span
+                  className="defi-united-ops__pf-ann-url"
+                  style={{
+                    flex: 1,
+                    fontSize: 12,
+                    color: "#6b7280",
+                    wordBreak: "break-all" as const,
+                  }}
+                >
+                  {a.url}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* Add new announcement */}
+        <div className="defi-united-ops__pf-announcements">
+          <div className="defi-united-ops__pf-ann-header">
+            <span className="defi-united-ops__pf-label">Add announcement</span>
+          </div>
+          <div className="defi-united-ops__pf-ann-row">
+            <select
+              value={newAnnPlatform}
+              onChange={(e) =>
+                setNewAnnPlatform(e.target.value as AnnouncementPlatform)
+              }
+              className="defi-united-ops__pf-ann-platform"
+            >
+              <option value="TWITTER">TWITTER</option>
+              <option value="FARCASTER">FARCASTER</option>
+              <option value="MIRROR">MIRROR</option>
+              <option value="BLOG">BLOG</option>
+            </select>
+            <input
+              type="url"
+              value={newAnnUrl}
+              onChange={(e) => setNewAnnUrl(e.target.value)}
+              onBlur={addNewAnnouncement}
+              placeholder="https://..."
+              className="defi-united-ops__pf-ann-url"
+            />
+          </div>
+        </div>
+      </div>
+      <Styles />
+    </RightPaneShell>
   );
 }
 
@@ -132,9 +252,7 @@ function StatusUpdateCreateForm({
     value: string,
   ) {
     setAnnouncements((prev) =>
-      prev.map((a) =>
-        a.id === id ? { ...a, [field]: value } : a,
-      ),
+      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a)),
     );
   }
 
@@ -207,9 +325,7 @@ function StatusUpdateCreateForm({
       busy={busy}
     >
       <div className="defi-united-ops__pf">
-        {err ? (
-          <div className="defi-united-ops__pf-error">{err}</div>
-        ) : null}
+        {err ? <div className="defi-united-ops__pf-error">{err}</div> : null}
 
         <Field label="Title" required>
           <input
@@ -283,11 +399,7 @@ function StatusUpdateCreateForm({
               <select
                 value={a.platform}
                 onChange={(e) =>
-                  updateAnnouncement(
-                    a.id,
-                    "platform",
-                    e.target.value,
-                  )
+                  updateAnnouncement(a.id, "platform", e.target.value)
                 }
                 className="defi-united-ops__pf-ann-platform"
               >
@@ -340,8 +452,7 @@ function Field({
   return (
     <label className="defi-united-ops__pf-field">
       <span className="defi-united-ops__pf-label">
-        {label}{" "}
-        {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
+        {label} {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
       </span>
       {children}
     </label>

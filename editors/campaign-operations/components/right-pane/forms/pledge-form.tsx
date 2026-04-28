@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  addDocument,
-  dispatchActions,
-} from "@powerhousedao/reactor-browser";
+import { addDocument, dispatchActions } from "@powerhousedao/reactor-browser";
 import type { ContributorProfileDocument } from "../../../../../document-models/contributor-profile/v1/gen/types.js";
 import type { PledgeDocument } from "../../../../../document-models/pledge/v1/gen/types.js";
 import { contributorProfileDocumentType } from "../../../../../document-models/contributor-profile/v1/gen/document-type.js";
@@ -16,7 +13,12 @@ import {
   attachGovernance,
   markGovernancePending,
   markConfirmed,
+  markReceived,
+  cancelPledge,
+  failPledge,
+  editNotes,
 } from "../../../../../document-models/pledge/v1/gen/lifecycle/creators.js";
+import { validTransitions } from "../../../state/valid-transitions.js";
 import { RightPaneShell } from "./right-pane-shell.js";
 import {
   ContributorPicker,
@@ -39,43 +41,293 @@ export function PledgeForm({
   driveId,
   onClose,
 }: PledgeFormProps) {
-  // Edit mode stub (full edit in next task)
-  if (mode === "edit") {
+  if (mode === "edit" && pledge) {
+    const contributorName =
+      profiles.find(
+        (p) => p.header.id === pledge.state.global.contributorProfileId,
+      )?.state.global.displayName ?? "Unknown contributor";
     return (
-      <RightPaneShell title="Edit pledge" onClose={onClose}>
-        <div
-          style={{
-            padding: 24,
-            color: "#6b7280",
-            fontSize: 13,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.4 }}>✏️</div>
-          <div style={{ fontWeight: 600, color: "#0f1115", marginBottom: 4 }}>
-            Edit mode coming soon
-          </div>
-          <div>Full pledge editing functionality lands in the next task.</div>
-          {pledge && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "#f7f8fa",
-                borderRadius: 6,
-                fontSize: 11,
-                color: "#9aa1ad",
-              }}
-            >
-              Pledge ID: {pledge.header.id}
-            </div>
-          )}
-        </div>
-      </RightPaneShell>
+      <PledgeEditForm
+        pledge={pledge}
+        contributorName={contributorName}
+        onClose={onClose}
+      />
     );
   }
 
-  return <PledgeCreateForm profiles={profiles} driveId={driveId} onClose={onClose} />;
+  return (
+    <PledgeCreateForm profiles={profiles} driveId={driveId} onClose={onClose} />
+  );
+}
+
+interface PledgeEditFormProps {
+  pledge: PledgeDocument;
+  contributorName: string;
+  onClose: () => void;
+}
+
+function PledgeEditForm({
+  pledge,
+  contributorName,
+  onClose,
+}: PledgeEditFormProps) {
+  const gs = pledge.state.global;
+  const pledgeId = pledge.header.id;
+
+  // Governance fields
+  const [govPlatform, setGovPlatform] = useState<GovernancePlatform>(
+    gs.governance?.platform ?? "SNAPSHOT",
+  );
+  const [govUrl, setGovUrl] = useState(gs.governance?.proposalUrl ?? "");
+  const [voteEndDate, setVoteEndDate] = useState(
+    gs.governance?.voteEndDate ? gs.governance.voteEndDate.slice(0, 10) : "",
+  );
+
+  // Notes fields
+  const [publicNotes, setPublicNotes] = useState(gs.publicNotes ?? "");
+  const [internalNotes, setInternalNotes] = useState(gs.internalNotes ?? "");
+
+  const hasReceipt = gs.receiptIds.length > 0;
+  const transitions = validTransitions(gs.status, hasReceipt);
+
+  function saveGovernance() {
+    if (!govUrl.trim()) return;
+    void dispatchActions(
+      attachGovernance({
+        platform: govPlatform,
+        proposalUrl: govUrl.trim(),
+        voteEndDate: voteEndDate
+          ? new Date(voteEndDate).toISOString()
+          : undefined,
+      }),
+      pledgeId,
+    );
+  }
+
+  function saveNotes() {
+    void dispatchActions(
+      editNotes({
+        publicNotes: publicNotes || undefined,
+        internalNotes: internalNotes || undefined,
+      }),
+      pledgeId,
+    );
+  }
+
+  function handleTransition(action: string) {
+    switch (action) {
+      case "markGovernancePending":
+        void dispatchActions(markGovernancePending({}), pledgeId);
+        break;
+      case "markConfirmed":
+        void dispatchActions(markConfirmed({}), pledgeId);
+        break;
+      case "markReceived":
+        if (
+          !hasReceipt &&
+          !window.confirm("No receipt yet — really mark received?")
+        )
+          return;
+        void dispatchActions(
+          markReceived({
+            amount: gs.pledgedAmount ?? 0,
+            receiptId: "",
+            receivedAt: new Date().toISOString(),
+          }),
+          pledgeId,
+        );
+        break;
+      case "cancelPledge":
+        void dispatchActions(cancelPledge({}), pledgeId);
+        break;
+      case "failPledge":
+        void dispatchActions(failPledge({}), pledgeId);
+        break;
+    }
+  }
+
+  return (
+    <RightPaneShell
+      title={`Edit pledge — ${contributorName}`}
+      onClose={onClose}
+    >
+      <div className="defi-united-ops__pf">
+        {/* Read-only header summary */}
+        <div className="defi-united-ops__pf-readonly-summary">
+          <span className="defi-united-ops__pf-label">Contributor</span>
+          <span className="defi-united-ops__pf-readonly-value">
+            {contributorName}
+          </span>
+          <span className="defi-united-ops__pf-label" style={{ marginTop: 8 }}>
+            Pledged amount
+          </span>
+          <div>
+            <span className="defi-united-ops__pf-readonly-value">
+              {gs.pledgedAmount != null
+                ? gs.pledgedAmount.toLocaleString(undefined, {
+                    maximumFractionDigits: 6,
+                  })
+                : "—"}{" "}
+              {gs.asset?.symbol ?? ""}
+            </span>
+            <small className="defi-united-ops__pf-hint">
+              Amount is locked at proposal time. Cancel + re-propose to change.
+            </small>
+          </div>
+        </div>
+
+        {/* Status section */}
+        <div className="defi-united-ops__pf-section">
+          <span className="defi-united-ops__pf-label">Status</span>
+          <div className="defi-united-ops__pf-status-row">
+            <span className="defi-united-ops__pf-status-badge">
+              {gs.status}
+            </span>
+            <div className="defi-united-ops__pf-transitions">
+              {transitions.map((t) => (
+                <button
+                  key={t.action}
+                  type="button"
+                  className={`defi-united-ops__pf-transition-btn${t.disabled ? " --disabled" : ""}`}
+                  disabled={t.disabled}
+                  title={t.disabledReason}
+                  onClick={() => !t.disabled && handleTransition(t.action)}
+                >
+                  → {t.to}
+                </button>
+              ))}
+              {transitions.length === 0 && (
+                <span className="defi-united-ops__pf-hint">
+                  Terminal status — no further transitions.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Governance section */}
+        <div className="defi-united-ops__pf-section">
+          <span className="defi-united-ops__pf-label">Governance</span>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              marginTop: 6,
+            }}
+          >
+            <Field label="Platform">
+              <select
+                value={govPlatform}
+                onChange={(e) =>
+                  setGovPlatform(e.target.value as GovernancePlatform)
+                }
+                onBlur={saveGovernance}
+              >
+                <option value="SNAPSHOT">SNAPSHOT</option>
+                <option value="TALLY">TALLY</option>
+                <option value="AGORA">AGORA</option>
+                <option value="FORUM">FORUM</option>
+                <option value="OTHER">OTHER</option>
+              </select>
+            </Field>
+            <Field label="Proposal URL">
+              <input
+                type="url"
+                value={govUrl}
+                onChange={(e) => setGovUrl(e.target.value)}
+                onBlur={saveGovernance}
+                placeholder="https://snapshot.org/..."
+              />
+            </Field>
+            <Field label="Vote end date">
+              <input
+                type="date"
+                value={voteEndDate}
+                onChange={(e) => setVoteEndDate(e.target.value)}
+                onBlur={saveGovernance}
+              />
+            </Field>
+          </div>
+        </div>
+
+        {/* Notes section */}
+        <div className="defi-united-ops__pf-section">
+          <span className="defi-united-ops__pf-label">Notes</span>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              marginTop: 6,
+            }}
+          >
+            <Field label="Public notes">
+              <textarea
+                rows={3}
+                value={publicNotes}
+                onChange={(e) => setPublicNotes(e.target.value)}
+                onBlur={saveNotes}
+                placeholder="Visible to all"
+              />
+            </Field>
+            <Field label="Internal notes">
+              <textarea
+                rows={3}
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                onBlur={saveNotes}
+                placeholder="Internal only"
+              />
+            </Field>
+          </div>
+        </div>
+      </div>
+      <EditStyles />
+    </RightPaneShell>
+  );
+}
+
+function EditStyles() {
+  return (
+    <style>{`
+      .defi-united-ops__pf-readonly-summary {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 12px; background: #f7f8fa; border-radius: 8px;
+        border: 1px solid #e6e8ec;
+      }
+      .defi-united-ops__pf-readonly-value {
+        font-size: 14px; font-weight: 600; color: #0f1115;
+      }
+      .defi-united-ops__pf-hint {
+        display: block; font-size: 11px; color: #9aa1ad; margin-top: 2px;
+      }
+      .defi-united-ops__pf-section {
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .defi-united-ops__pf-status-row {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;
+      }
+      .defi-united-ops__pf-status-badge {
+        display: inline-block; padding: 3px 10px;
+        background: #e8f0fe; color: #1a4dd6;
+        border-radius: 20px; font-size: 12px; font-weight: 600;
+      }
+      .defi-united-ops__pf-transitions {
+        display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+      }
+      .defi-united-ops__pf-transition-btn {
+        font-size: 12px; font-weight: 500; color: #1a4dd6;
+        background: #eff4ff; border: 1px solid #c7d7fa;
+        padding: 4px 10px; border-radius: 5px; cursor: pointer;
+      }
+      .defi-united-ops__pf-transition-btn:hover:not(:disabled) { background: #dce8ff; }
+      .defi-united-ops__pf-transition-btn.--disabled,
+      .defi-united-ops__pf-transition-btn:disabled {
+        color: #9aa1ad; background: #f1f3f7; border-color: #e6e8ec; cursor: not-allowed;
+      }
+    `}</style>
+  );
 }
 
 interface PledgeCreateFormProps {
@@ -84,7 +336,11 @@ interface PledgeCreateFormProps {
   onClose: () => void;
 }
 
-function PledgeCreateForm({ profiles, driveId, onClose }: PledgeCreateFormProps) {
+function PledgeCreateForm({
+  profiles,
+  driveId,
+  onClose,
+}: PledgeCreateFormProps) {
   const [contributor, setContributor] = useState<ContributorSelection | null>(
     null,
   );
@@ -116,10 +372,10 @@ function PledgeCreateForm({ profiles, driveId, onClose }: PledgeCreateFormProps)
     try {
       // 1. Resolve or create contributor profile
       let contribId: string;
-      if (contributor!.existingId) {
-        contribId = contributor!.existingId;
+      if (contributor.existingId) {
+        contribId = contributor.existingId;
       } else {
-        const newProf = contributor!.newProfile!;
+        const newProf = contributor.newProfile!;
         const profDoc = await addDocument(
           driveId,
           newProf.displayName,
@@ -142,11 +398,10 @@ function PledgeCreateForm({ profiles, driveId, onClose }: PledgeCreateFormProps)
       }
 
       // 2. Determine display name for pledge document name
-      const displayName =
-        contributor!.existingId
-          ? (profiles.find((p) => p.header.id === contributor!.existingId)
-              ?.state.global.displayName ?? "Pledge")
-          : contributor!.newProfile!.displayName;
+      const displayName = contributor.existingId
+        ? (profiles.find((p) => p.header.id === contributor.existingId)?.state
+            .global.displayName ?? "Pledge")
+        : contributor.newProfile!.displayName;
 
       // 3. Create pledge document
       const pledgeDoc = await addDocument(
@@ -210,9 +465,7 @@ function PledgeCreateForm({ profiles, driveId, onClose }: PledgeCreateFormProps)
       busy={busy}
     >
       <div className="defi-united-ops__pf">
-        {err ? (
-          <div className="defi-united-ops__pf-error">{err}</div>
-        ) : null}
+        {err ? <div className="defi-united-ops__pf-error">{err}</div> : null}
 
         <Field label="Contributor" required>
           <ContributorPicker
@@ -272,7 +525,14 @@ function PledgeCreateForm({ profiles, driveId, onClose }: PledgeCreateFormProps)
 
         <details>
           <summary>Governance (optional)</summary>
-          <div style={{ paddingTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            style={{
+              paddingTop: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
             <Field label="Platform">
               <select
                 value={govPlatform}
@@ -329,8 +589,7 @@ function Field({
   return (
     <label className="defi-united-ops__pf-field">
       <span className="defi-united-ops__pf-label">
-        {label}{" "}
-        {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
+        {label} {required ? <span style={{ color: "#dc2626" }}>*</span> : null}
       </span>
       {children}
     </label>
