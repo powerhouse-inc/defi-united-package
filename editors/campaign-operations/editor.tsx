@@ -29,6 +29,7 @@ import { useRightPane } from "./state/use-right-pane.js";
 import { deriveTasks, type Task } from "./state/derive-tasks.js";
 import { deriveActivity } from "./state/derive-activity.js";
 import { DefaultView } from "./components/right-pane/default-view.js";
+import { PledgeForm } from "./components/right-pane/forms/pledge-form.js";
 import { TwoPaneShell } from "./components/two-pane-shell.js";
 import { editorConfig } from "./config.js";
 import { HeaderStrip } from "./components/header-strip.js";
@@ -539,28 +540,48 @@ export default function Editor(_props: EditorProps) {
     </div>
   );
 
-  const rightPaneContent =
-    rightPaneState.selectedItem == null ? (
-      <DefaultView
-        tasks={tasks}
-        events={recentEvents}
-        totalEventCount={totalActivity}
-        rightPane={rightPaneState}
-        onPrimaryAction={handlePrimaryAction}
-        raisedEth={raisedEth}
-        targetEth={targetEth}
-        usdLabel={usdLabel}
-        ethLabel={ethLabel}
-        funnelSegments={funnelSegments}
-        cumulativeSeries={cumulativeSeries}
-        topContribs={topContribs}
-        onchainBuckets={onchainBuckets}
-      />
-    ) : (
+  const rightPaneContent = (() => {
+    if (rightPaneState.selectedItem == null) {
+      return (
+        <DefaultView
+          tasks={tasks}
+          events={recentEvents}
+          totalEventCount={totalActivity}
+          rightPane={rightPaneState}
+          onPrimaryAction={handlePrimaryAction}
+          raisedEth={raisedEth}
+          targetEth={targetEth}
+          usdLabel={usdLabel}
+          ethLabel={ethLabel}
+          funnelSegments={funnelSegments}
+          cumulativeSeries={cumulativeSeries}
+          topContribs={topContribs}
+          onchainBuckets={onchainBuckets}
+        />
+      );
+    }
+    if (rightPaneState.selectedItem.type === "pledge") {
+      const item = rightPaneState.selectedItem;
+      const pledge =
+        item.mode === "edit"
+          ? pledges.find((p) => p.header.id === (item as { id: string }).id)
+          : undefined;
+      return (
+        <PledgeForm
+          mode={item.mode}
+          pledge={pledge}
+          profiles={contributorProfiles}
+          driveId={selectedDrive.header.id}
+          onClose={rightPaneState.close}
+        />
+      );
+    }
+    return (
       <div style={{ padding: 16, color: "#6b7280", fontSize: 13 }}>
-        Right-pane forms coming next.
+        Form for {rightPaneState.selectedItem.type} coming next.
       </div>
     );
+  })();
 
   return (
     <div className="defi-united-ops" style={{ height: "100%" }}>
