@@ -1,9 +1,10 @@
-import { setSelectedNode } from "@powerhousedao/reactor-browser";
 import type { Action } from "document-model";
 import { useMemo, useState } from "react";
 
 import { formatAmount, truncatePhid } from "../utils/formatting.js";
 import { exportToCsv } from "../utils/csv.js";
+import { StatusPill } from "./inline-edit/status-pill.js";
+import { GovernancePopover } from "./inline-edit/governance-popover.js";
 
 import type { PledgeDocument } from "../../../document-models/pledge/v1/gen/types.js";
 import type { ContributorProfileDocument } from "../../../document-models/contributor-profile/v1/gen/types.js";
@@ -25,6 +26,7 @@ interface PledgeBoardProps {
   contributorProfiles: ContributorProfileDocument[];
   dispatchPledges: (documentId: string, action: Action) => void;
   campaignTarget?: number | null;
+  onOpen?: (pledgeId: string) => void;
 }
 
 const COLUMNS: { status: PledgeStatus; label: string }[] = [
@@ -41,33 +43,12 @@ const STATUS_ACCENT: Record<string, string> = {
   RECEIVED: "#1a7048",
 };
 
-const STATUS_TRANSITION: Record<PledgeStatus, PledgeStatus | undefined> = {
-  PROPOSED: "GOVERNANCE_PENDING",
-  GOVERNANCE_PENDING: "CONFIRMED",
-  CONFIRMED: "RECEIVED",
-  RECEIVED: undefined,
-  CANCELLED: undefined,
-  FAILED: undefined,
-};
-
-const STATUS_LABEL: Record<PledgeStatus, string> = {
-  PROPOSED: "Proposed",
-  GOVERNANCE_PENDING: "Governance Pending",
-  CONFIRMED: "Confirmed",
-  RECEIVED: "Received",
-  CANCELLED: "Cancelled",
-  FAILED: "Failed",
-};
-
-function selectNode(nodeId: string) {
-  setSelectedNode(nodeId);
-}
-
 export function PledgeBoard({
   pledges,
   contributorProfiles,
   dispatchPledges,
   campaignTarget,
+  onOpen,
 }: PledgeBoardProps) {
   const profilesByPhid = useMemo(() => {
     const map = new Map<string, ContributorProfileDocument>();
@@ -284,6 +265,7 @@ export function PledgeBoard({
                       selectMode={selectMode}
                       selectedIds={selectedIds}
                       onToggle={togglePledge}
+                      onOpen={onOpen}
                     />
                   ))
                 )}
@@ -627,10 +609,11 @@ export function PledgeBoard({
 function PledgeCard({
   pledge,
   profile,
-  dispatchPledges,
+  dispatchPledges: _dispatchPledges,
   selectMode,
   selectedIds,
   onToggle,
+  onOpen,
 }: {
   pledge: PledgeDocument;
   profile: ContributorProfileDocument | undefined;
@@ -638,57 +621,33 @@ function PledgeCard({
   selectMode: boolean;
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
+  onOpen?: (pledgeId: string) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const state = pledge.state.global;
   const displayName =
     profile?.state.global.displayName ??
     truncatePhid(state.contributorProfileId);
   const symbol = state.asset?.symbol ?? "";
-  const hasGovernance = !!state.governance;
+  const hasReceipt = state.receiptIds.length > 0;
 
-  const nextStatus = STATUS_TRANSITION[state.status];
-  const nextStatusLabel = nextStatus ? STATUS_LABEL[nextStatus] : undefined;
-
-  function handleTransition(e: React.MouseEvent) {
-    e.stopPropagation();
-
-    if (!nextStatus) return;
-
-    const confirmedMsg = `Move "${displayName}" to ${nextStatusLabel}?`;
-    if (!window.confirm(confirmedMsg)) return;
-
-    let action: Action | undefined = undefined;
-
-    switch (nextStatus) {
-      case "GOVERNANCE_PENDING":
-        action = {
-          type: "MARK_GOVERNANCE_PENDING",
-          input: {},
-          scope: "global",
-        } as Action;
-        break;
-      case "CONFIRMED":
-        action = {
-          type: "MARK_CONFIRMED",
-          input: {},
-          scope: "global",
-        } as Action;
-        break;
-      case "RECEIVED":
-        action = {
-          type: "MARK_RECEIVED",
-          input: {
-            receiptId: "",
-            receivedAt: new Date().toISOString(),
-            amount: state.pledgedAmount ?? 0,
-          },
-          scope: "global",
-        } as Action;
-        break;
+  function handleCardClick(e: React.MouseEvent) {
+    if (selectMode) {
+      e.stopPropagation();
+      onToggle(pledge.header.id);
+    } else {
+      onOpen?.(pledge.header.id);
     }
+  }
 
-    if (action) {
-      dispatchPledges(pledge.header.id, action);
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (selectMode) {
+        onToggle(pledge.header.id);
+      } else {
+        onOpen?.(pledge.header.id);
+      }
     }
   }
 
@@ -697,21 +656,12 @@ function PledgeCard({
       className={`defi-united-ops__pledge-card${selectedIds.has(pledge.header.id) ? " defi-united-ops__pledge-card--selected" : ""}`}
       role="button"
       tabIndex={0}
-      onClick={(e) => {
-        if (selectMode) {
-          e.stopPropagation();
-          onToggle(pledge.header.id);
-        } else {
-          selectNode(pledge.header.id);
-        }
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          selectNode(pledge.header.id);
-        }
-      }}
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={`Open ${displayName}`}
+      style={{ position: "relative" }}
     >
       {selectMode ? (
         <label className="defi-united-ops__pledge-checkbox">
@@ -725,31 +675,52 @@ function PledgeCard({
       ) : null}
       <div className="defi-united-ops__pledge-header-row">
         <div className="defi-united-ops__pledge-name">{displayName}</div>
-        {nextStatus ? (
-          <button
-            type="button"
-            className="defi-united-ops__pledge-transition"
-            onClick={handleTransition}
-            title={`Advance to ${nextStatusLabel}`}
-            aria-label={`Advance to ${nextStatusLabel}`}
-          >
-            → {nextStatusLabel}
-          </button>
-        ) : null}
+        <StatusPill
+          pledgeId={pledge.header.id}
+          currentStatus={state.status}
+          hasReceipt={hasReceipt}
+          pledgedAmount={state.pledgedAmount ?? null}
+        />
       </div>
       <div className="defi-united-ops__pledge-amount">
-        {formatAmount(state.pledgedAmount)} {symbol}
+        {formatAmount(state.pledgedAmount)} {symbol}{" "}
+        <span
+          title="Pledged amount is locked at proposal time. Cancel + re-propose to change"
+          style={{ fontSize: 10, color: "#9aa1ad", cursor: "help" }}
+        >
+          ⓘ
+        </span>
       </div>
-      {hasGovernance ? (
+      <div style={{ marginTop: 4 }}>
+        <GovernancePopover
+          pledgeId={pledge.header.id}
+          current={state.governance}
+        />
+      </div>
+      {state.governance?.quorumStatus ? (
         <div className="defi-united-ops__pledge-tags">
-          <span className="defi-united-ops__pledge-tag defi-united-ops__pledge-tag--gov">
-            {state.governance?.platform ?? "GOV"}
+          <span className="defi-united-ops__pledge-tag">
+            {state.governance.quorumStatus}
           </span>
-          {state.governance?.quorumStatus ? (
-            <span className="defi-united-ops__pledge-tag">
-              {state.governance.quorumStatus}
-            </span>
-          ) : null}
+        </div>
+      ) : null}
+      {hovered && !selectMode && onOpen ? (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(pledge.header.id);
+          }}
+          style={{
+            position: "absolute",
+            bottom: 8,
+            right: 10,
+            fontSize: 10,
+            color: "#1a4dd6",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          Open in editor →
         </div>
       ) : null}
     </div>

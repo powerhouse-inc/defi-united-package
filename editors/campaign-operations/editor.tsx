@@ -469,6 +469,9 @@ export default function Editor(_props: EditorProps) {
               contributorProfiles={filteredContributorProfiles}
               dispatchPledges={dispatchPledges}
               campaignTarget={campaign.state.global.targetAmount}
+              onOpen={(id) =>
+                rightPaneState.open({ type: "pledge", id, mode: "edit" })
+              }
             />
           </div>
 
