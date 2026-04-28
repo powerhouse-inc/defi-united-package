@@ -547,9 +547,10 @@ function LifecycleStyles() {
       .defi-united-ops__lifecycle {
         position: relative;
         padding: 18px 22px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, rgba(142,92,255,0.06) 0%, rgba(230,62,157,0.04) 100%);
-        border: 1px solid rgba(142,92,255,0.18);
+        border-radius: 12px;
+        background: #ffffff;
+        border: 1px solid #e6e8ec;
+        box-shadow: 0 1px 2px rgba(15, 17, 21, 0.04);
         display: flex;
         flex-direction: column;
         gap: 16px;

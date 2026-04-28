@@ -445,38 +445,6 @@ export function PledgeBoard({
           flex: 1;
           min-width: 0;
         }
-        .defi-united-ops__pledge-transition {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          flex-shrink: 0;
-          padding: 3px 9px;
-          border: 1px solid rgba(142,92,255,0.25);
-          background: rgba(142,92,255,0.08);
-          color: #6936dc;
-          border-radius: 999px;
-          cursor: pointer;
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          opacity: 0.85;
-          white-space: nowrap;
-          transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease;
-        }
-        .defi-united-ops__pledge-card:hover .defi-united-ops__pledge-transition {
-          opacity: 1;
-        }
-        .defi-united-ops__pledge-transition:focus {
-          opacity: 1;
-          outline: 2px solid #8e5cff;
-          outline-offset: 1px;
-        }
-        .defi-united-ops__pledge-transition:hover {
-          background: rgba(142,92,255,0.16);
-          border-color: rgba(142,92,255,0.5);
-          color: #4f1fc0;
-          transform: translateY(-1px);
-        }
         .defi-united-ops__pledge-amount {
           font-size: 12px;
           color: #525a6b;

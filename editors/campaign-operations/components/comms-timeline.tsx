@@ -141,17 +141,18 @@ export function CommsTimeline({
           margin-bottom: 12px;
           font-size: 13px;
           font-weight: 600;
-          color: #6936dc;
-          background: linear-gradient(180deg, rgba(142,92,255,0.06), rgba(255,255,255,0));
-          border: 1px dashed rgba(142,92,255,0.4);
-          border-radius: 12px;
+          color: #525a6b;
+          background: #ffffff;
+          border: 1px dashed #d4d7e0;
+          border-radius: 8px;
           width: 100%;
           cursor: pointer;
           transition: background 150ms ease, border-color 150ms ease;
         }
         .defi-united-ops__comms-compose-trigger:hover {
-          background: rgba(142,92,255,0.08);
-          border-color: rgba(142,92,255,0.7);
+          background: #f7f8fa;
+          border-color: #1a4dd6;
+          color: #1a4dd6;
         }
         .defi-united-ops__comms-compose-trigger span {
           font-size: 16px;

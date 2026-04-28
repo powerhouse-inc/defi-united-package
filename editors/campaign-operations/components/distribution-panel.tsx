@@ -547,14 +547,16 @@ export function DistributionPanel({ plan }: DistributionPanelProps) {
           padding: 7px 14px;
           font-size: 12px;
           font-weight: 600;
-          color: #6936dc;
-          background: rgba(142,92,255,0.08);
-          border: 1px dashed rgba(142,92,255,0.35);
+          color: #525a6b;
+          background: #ffffff;
+          border: 1px dashed #d4d7e0;
           border-radius: 999px;
           cursor: pointer;
         }
         .defi-united-ops__dist-add-trigger:hover {
-          background: rgba(142,92,255,0.14);
+          background: #f7f8fa;
+          border-color: #1a4dd6;
+          color: #1a4dd6;
         }
         .defi-united-ops__dist-add-form {
           display: flex;

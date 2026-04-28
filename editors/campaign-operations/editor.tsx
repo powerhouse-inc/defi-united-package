@@ -994,10 +994,10 @@ function EmptyCampaignNotice() {
       <style>{`
         .defi-united-ops__empty-card {
           padding: 28px 32px;
-          border-radius: 16px;
-          background: linear-gradient(180deg, rgba(142,92,255,0.06) 0%, rgba(255,255,255,0) 100%);
-          border: 1px solid rgba(142,92,255,0.18);
-          box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 30px -12px rgba(142,92,255,0.18);
+          border-radius: 12px;
+          background: #ffffff;
+          border: 1px solid #e6e8ec;
+          box-shadow: 0 1px 2px rgba(15, 17, 21, 0.04);
         }
         .defi-united-ops__empty-eyebrow {
           font-size: 11px;
