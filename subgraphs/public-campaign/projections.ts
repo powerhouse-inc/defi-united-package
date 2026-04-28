@@ -308,6 +308,11 @@ export function projectCampaign(
     onchainLiveBalance: liveBalance,
     pendingReceiptsEthEquivalent,
     headlineTotalEthEquivalent: str(headlineTotalEthEquivalentValue),
+    headlineTotalUsd: (() => {
+      const price = liveBalance?.ethPriceUsd;
+      if (price === undefined || price === null) return null;
+      return str(Math.round(headlineTotalEthEquivalentValue * price));
+    })(),
     contributionAddresses: c.contributionAddresses.map((a) => ({
       chainId: a.chainId,
       address: a.address,

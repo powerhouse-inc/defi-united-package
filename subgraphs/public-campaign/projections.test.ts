@@ -283,4 +283,26 @@ describe("projectCampaign", () => {
     });
     expect(result.headlineTotalEthEquivalent).toBe("35197.5");
   });
+
+  it("headlineTotalUsd = Math.round(headlineTotalEthEquivalent * ethPriceUsd)", () => {
+    const bundle = buildBundle();
+    // buildBundle() has totalPledged = 35000 (30000 + 5000, excluding CANCELLED 1000)
+    // liveBalance.totalEthEquivalent = "200", totalReceived = 2.5
+    // => pendingReceiptsEthEquivalent = 200 - 2.5 = 197.5
+    // => headlineTotalEthEquivalent = 35000 + 197.5 = 35197.5
+    // => headlineTotalUsd = Math.round(35197.5 * 2275) = 80074313
+    const result = projectCampaign(bundle, {
+      totalEthEquivalent: "200",
+      perAsset: [],
+      fetchedAt: "2026-04-28T00:00:00.000Z",
+      ethPriceUsd: 2275,
+    });
+    expect(result.headlineTotalUsd).toBe("80074313");
+  });
+
+  it("headlineTotalUsd is null when no live overlay is provided", () => {
+    // No liveBalance overlay => ethPriceUsd unavailable => headlineTotalUsd must be null
+    const result = projectCampaign(buildBundle());
+    expect(result.headlineTotalUsd).toBeNull();
+  });
 });
