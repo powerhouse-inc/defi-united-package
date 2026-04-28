@@ -570,12 +570,11 @@ export default function Editor(_props: EditorProps) {
     }
     if (rightPaneState.selectedItem.type === "pledge") {
       const item = rightPaneState.selectedItem;
-      const pledge =
-        item.mode === "edit"
-          ? pledges.find((p) => p.header.id === (item as { id: string }).id)
-          : undefined;
+      const pledgeId = item.mode === "edit" ? (item as { id: string }).id : undefined;
+      const pledge = pledgeId ? pledges.find((p) => p.header.id === pledgeId) : undefined;
       return (
         <PledgeForm
+          key={`pledge-${item.mode}-${pledgeId ?? "new"}`}
           mode={item.mode}
           pledge={pledge}
           profiles={contributorProfiles}
@@ -586,14 +585,13 @@ export default function Editor(_props: EditorProps) {
     }
     if (rightPaneState.selectedItem.type === "contributor") {
       const item = rightPaneState.selectedItem;
-      const profile =
-        item.mode === "edit"
-          ? contributorProfiles.find(
-              (c) => c.header.id === (item as { id: string }).id,
-            )
-          : undefined;
+      const profileId = item.mode === "edit" ? (item as { id: string }).id : undefined;
+      const profile = profileId
+        ? contributorProfiles.find((c) => c.header.id === profileId)
+        : undefined;
       return (
         <ContributorForm
+          key={`contributor-${item.mode}-${profileId ?? "new"}`}
           mode={item.mode}
           profile={profile}
           driveId={selectedDrive.header.id}
@@ -603,14 +601,11 @@ export default function Editor(_props: EditorProps) {
     }
     if (rightPaneState.selectedItem.type === "dependency") {
       const item = rightPaneState.selectedItem;
-      const dep =
-        item.mode === "edit"
-          ? dependencies.find(
-              (d) => d.header.id === (item as { id: string }).id,
-            )
-          : undefined;
+      const depId = item.mode === "edit" ? (item as { id: string }).id : undefined;
+      const dep = depId ? dependencies.find((d) => d.header.id === depId) : undefined;
       return (
         <DependencyForm
+          key={`dependency-${item.mode}-${depId ?? "new"}`}
           mode={item.mode}
           dependency={dep}
           pledges={pledges}
@@ -622,12 +617,10 @@ export default function Editor(_props: EditorProps) {
     }
     if (rightPaneState.selectedItem.type === "status-update") {
       const item = rightPaneState.selectedItem;
-      const statusUpdate =
-        item.mode === "edit"
-          ? statusUpdates.find(
-              (u) => u.header.id === (item as { id: string }).id,
-            )
-          : undefined;
+      const updateId = item.mode === "edit" ? (item as { id: string }).id : undefined;
+      const statusUpdate = updateId
+        ? statusUpdates.find((u) => u.header.id === updateId)
+        : undefined;
       const totalPledgedSum = pledges.reduce(
         (s, p) => s + (Number(p.state.global.pledgedAmount) || 0),
         0,
@@ -643,6 +636,7 @@ export default function Editor(_props: EditorProps) {
       ).length;
       return (
         <StatusUpdateForm
+          key={`status-update-${item.mode}-${updateId ?? "new"}`}
           mode={item.mode}
           update={statusUpdate}
           driveId={selectedDrive.header.id}
