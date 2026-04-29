@@ -2,7 +2,7 @@
 /**
  * scripts/seed.mjs
  *
- * Wipes the lower-stakes DeFi United tenant (*.defiunited.w3b.li) and reseeds
+ * Wipes the lower-stakes DeFi United tenant (*.defiunited.space) and reseeds
  * it from the live demo's public-campaign projection (*.defiunited.web3.berlin).
  *
  * Usage:
@@ -54,7 +54,7 @@ const FORBIDDEN_TARGET_HOSTS = [
   "defiunited.web3.berlin",
 ];
 
-const DEFAULT_TARGET = "https://switchboard.defiunited.w3b.li/graphql/r";
+const DEFAULT_TARGET = "https://switchboard.defiunited.space/graphql/r";
 const SOURCE_ENDPOINT =
   process.env.SEED_SOURCE ??
   "https://switchboard.defiunited.web3.berlin/graphql/defi-united-public-campaign";
@@ -701,7 +701,7 @@ log("\n>> Verifying via public-campaign projection on target…");
 
 const VERIFY_ENDPOINT =
   process.env.SEED_VERIFY ??
-  "https://switchboard.defiunited.w3b.li/graphql/defi-united-public-campaign";
+  "https://switchboard.defiunited.space/graphql/defi-united-public-campaign";
 
 let verifyResult;
 try {
