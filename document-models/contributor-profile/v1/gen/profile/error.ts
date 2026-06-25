@@ -44,7 +44,10 @@ export class GovernanceEndpointNotFoundError
 
 export const errors = {
   AddWallet: { DuplicateWalletError },
+
   RemoveWallet: { WalletNotFoundError },
+
   AddGovernanceEndpoint: { DuplicateGovernanceEndpointError },
+
   RemoveGovernanceEndpoint: { GovernanceEndpointNotFoundError },
 };

@@ -41,12 +41,20 @@ export class PlanNotApprovedError extends Error implements ReducerError {
 
 export const errors = {
   AddRecipient: { InvalidStatusTransitionError, DuplicateRecipientError },
+
   UpdateRecipient: { InvalidStatusTransitionError, RecipientNotFoundError },
+
   RemoveRecipient: { InvalidStatusTransitionError, RecipientNotFoundError },
+
   ApprovePlan: { InvalidStatusTransitionError },
+
   MarkRecipientSent: { PlanNotApprovedError, RecipientNotFoundError },
+
   MarkRecipientFailed: { PlanNotApprovedError, RecipientNotFoundError },
+
   MarkRecipientRefunded: { PlanNotApprovedError, RecipientNotFoundError },
+
   CompleteDistribution: { InvalidStatusTransitionError },
+
   CancelPlan: { InvalidStatusTransitionError },
 };

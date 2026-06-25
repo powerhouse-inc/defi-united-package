@@ -11,10 +11,10 @@ import type { OnchainReceiptPHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the OnchainReceipt document type */
-export const OnchainReceipt: DocumentModelModule<OnchainReceiptPHState> = {
+export const OnchainReceipt = {
   version: 1,
   reducer,
   actions,
   utils,
   documentModel: createState(defaultBaseState(), documentModel),
-};
+} as const satisfies DocumentModelModule<OnchainReceiptPHState>;

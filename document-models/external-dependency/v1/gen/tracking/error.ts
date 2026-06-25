@@ -44,8 +44,12 @@ export class InvalidStatusTransitionError
 
 export const errors = {
   UpdateStatus: { DependencyAlreadyResolvedError },
+
   LinkPledge: { PledgeAlreadyLinkedError },
+
   UnlinkPledge: { PledgeNotLinkedError },
+
   Resolve: { DependencyAlreadyResolvedError, InvalidStatusTransitionError },
+
   Abandon: { InvalidStatusTransitionError },
 };

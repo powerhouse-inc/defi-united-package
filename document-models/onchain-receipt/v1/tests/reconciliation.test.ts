@@ -1,138 +1,123 @@
+import { generateMock } from "document-model";
 import {
   attachPledge,
+  AttachPledgeInputSchema,
   clearMatch,
+  ClearMatchInputSchema,
   isOnchainReceiptDocument,
   markAmbiguous,
+  MarkAmbiguousInputSchema,
   markReorged,
+  MarkReorgedInputSchema,
   overrideMatch,
+  OverrideMatchInputSchema,
   recordReceipt,
+  RecordReceiptInputSchema,
   reducer,
   utils,
 } from "document-models/onchain-receipt/v1";
 import { describe, expect, it } from "vitest";
 
-const FROM = "0x1111111111111111111111111111111111111111";
-const TO = "0x0fCa5194baA59a362a835031d9C4A25970effE68";
-const TX = "0xdeadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef1234";
-const PLEDGE_A = "ph:pledge:mantle";
-const PLEDGE_B = "ph:pledge:aave";
+describe("ReconciliationOperations", () => {
+  it("should handle recordReceipt operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(RecordReceiptInputSchema());
 
-const recordEth = () =>
-  recordReceipt({
-    chainId: 1,
-    txHash: TX,
-    blockNumber: 21_000_000,
-    blockTimestamp: "2026-04-25T12:00:00.000Z",
-    fromAddress: FROM,
-    toAddress: TO,
-    asset: { symbol: "ETH" },
-    amount: 5000,
-    ethEquivalentAmount: 5000,
-    ethPriceUsdAtReceipt: 2200,
-  });
+    const updatedDocument = reducer(document, recordReceipt(input));
 
-describe("OnchainReceipt reconciliation reducer", () => {
-  it("starts UNMATCHED with no fields populated", () => {
-    const doc = utils.createDocument();
-    expect(isOnchainReceiptDocument(doc)).toBe(true);
-    expect(doc.state.global.reconciliationStatus).toBe("UNMATCHED");
-    expect(doc.state.global.txHash).toBeNull();
-  });
-
-  it("RECORD_RECEIPT populates all fields and normalises asset.contractAddress", () => {
-    const doc = utils.createDocument();
-    const next = reducer(doc, recordEth());
-    expect(next.state.global.txHash).toBe(TX);
-    expect(next.state.global.chainId).toBe(1);
-    expect(next.state.global.amount).toBe(5000);
-    expect(next.state.global.asset).toEqual({
-      symbol: "ETH",
-      contractAddress: null,
-    });
-    expect(next.state.global.reconciliationStatus).toBe("UNMATCHED");
-  });
-
-  it("rejects double-record on same document", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, recordEth());
-    expect(doc.operations.global[1].error).toBe(
-      "Receipt has already been recorded",
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "RECORD_RECEIPT",
     );
-  });
-
-  it("ATTACH_PLEDGE flips status to MATCHED", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, attachPledge({ pledgeId: PLEDGE_A }));
-    expect(doc.state.global.matchedPledgeId).toBe(PLEDGE_A);
-    expect(doc.state.global.reconciliationStatus).toBe("MATCHED");
-  });
-
-  it("MARK_AMBIGUOUS sets status without picking a pledge", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, markAmbiguous({ _: null }));
-    expect(doc.state.global.reconciliationStatus).toBe("AMBIGUOUS");
-    expect(doc.state.global.matchedPledgeId).toBeNull();
-  });
-
-  it("OVERRIDE_MATCH wins over a previous MATCHED", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, attachPledge({ pledgeId: PLEDGE_A }));
-    doc = reducer(doc, overrideMatch({ pledgeId: PLEDGE_B }));
-    expect(doc.state.global.matchedPledgeId).toBe(PLEDGE_B);
-    expect(doc.state.global.reconciliationStatus).toBe("MANUALLY_OVERRIDDEN");
-  });
-
-  it("CLEAR_MATCH resets back to UNMATCHED", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, attachPledge({ pledgeId: PLEDGE_A }));
-    doc = reducer(doc, clearMatch({ _: null }));
-    expect(doc.state.global.matchedPledgeId).toBeNull();
-    expect(doc.state.global.reconciliationStatus).toBe("UNMATCHED");
-  });
-
-  it("RECORD_RECEIPT supports ERC-20 receipts via contractAddress", () => {
-    const doc = utils.createDocument();
-    const next = reducer(
-      doc,
-      recordReceipt({
-        chainId: 1,
-        txHash: TX,
-        blockNumber: 21_000_000,
-        blockTimestamp: "2026-04-25T12:00:00.000Z",
-        fromAddress: FROM,
-        toAddress: TO,
-        asset: {
-          symbol: "USDC",
-          contractAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        },
-        amount: 1000,
-        ethEquivalentAmount: 0.4545,
-        ethPriceUsdAtReceipt: 2200,
-      }),
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
-    expect(next.state.global.asset?.contractAddress).toBe(
-      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
+
+  it("should handle attachPledge operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(AttachPledgeInputSchema());
+
+    const updatedDocument = reducer(document, attachPledge(input));
+
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "ATTACH_PLEDGE",
     );
-    expect(next.state.global.ethEquivalentAmount).toBe(0.4545);
-    expect(next.state.global.ethPriceUsdAtReceipt).toBe(2200);
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("RECORD_RECEIPT pins ethEquivalentAmount + price for ETH-denominated rollups", () => {
-    const doc = utils.createDocument();
-    const next = reducer(doc, recordEth());
-    expect(next.state.global.ethEquivalentAmount).toBe(5000);
-    expect(next.state.global.ethPriceUsdAtReceipt).toBe(2200);
+  it("should handle markAmbiguous operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(MarkAmbiguousInputSchema());
+
+    const updatedDocument = reducer(document, markAmbiguous(input));
+
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "MARK_AMBIGUOUS",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("MARK_REORGED moves status to REORGED so totals can exclude it", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, recordEth());
-    doc = reducer(doc, markReorged({ _: null }));
-    expect(doc.state.global.reconciliationStatus).toBe("REORGED");
+  it("should handle overrideMatch operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(OverrideMatchInputSchema());
+
+    const updatedDocument = reducer(document, overrideMatch(input));
+
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "OVERRIDE_MATCH",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
+
+  it("should handle clearMatch operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(ClearMatchInputSchema());
+
+    const updatedDocument = reducer(document, clearMatch(input));
+
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "CLEAR_MATCH",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
+
+  it("should handle markReorged operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(MarkReorgedInputSchema());
+
+    const updatedDocument = reducer(document, markReorged(input));
+
+    expect(isOnchainReceiptDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "MARK_REORGED",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 });

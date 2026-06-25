@@ -11,10 +11,10 @@ import type { DistributionPlanPHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the DistributionPlan document type */
-export const DistributionPlan: DocumentModelModule<DistributionPlanPHState> = {
+export const DistributionPlan = {
   version: 1,
   reducer,
   actions,
   utils,
   documentModel: createState(defaultBaseState(), documentModel),
-};
+} as const satisfies DocumentModelModule<DistributionPlanPHState>;

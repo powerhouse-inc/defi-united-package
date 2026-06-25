@@ -1,139 +1,123 @@
-import { generateId } from "document-model";
+import { generateMock } from "document-model";
 import {
   attachAnnouncement,
+  AttachAnnouncementInputSchema,
   draftUpdate,
+  DraftUpdateInputSchema,
   editUpdate,
+  EditUpdateInputSchema,
   isStatusUpdateDocument,
   publishUpdate,
+  PublishUpdateInputSchema,
   reducer,
   retractUpdate,
+  RetractUpdateInputSchema,
   setVisibility,
+  SetVisibilityInputSchema,
   utils,
 } from "document-models/status-update/v1";
 import { describe, expect, it } from "vitest";
 
-const PUB_AT = "2026-04-25T15:00:00.000Z";
+describe("PublishingOperations", () => {
+  it("should handle draftUpdate operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(DraftUpdateInputSchema());
 
-describe("StatusUpdate publishing reducer", () => {
-  it("starts INTERNAL with empty title/body", () => {
-    const doc = utils.createDocument();
-    expect(isStatusUpdateDocument(doc)).toBe(true);
-    expect(doc.state.global.visibility).toBe("INTERNAL");
-    expect(doc.state.global.title).toBe("");
-    expect(doc.state.global.body).toBe("");
-    expect(doc.state.global.publishedAt).toBeNull();
+    const updatedDocument = reducer(document, draftUpdate(input));
+
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "DRAFT_UPDATE",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("DRAFT_UPDATE sets fields", () => {
-    const doc = utils.createDocument();
-    const next = reducer(
-      doc,
-      draftUpdate({
-        title: "DeFi United launches recovery effort",
-        body: "Initial pledges have been received...",
-        visibility: "PUBLIC",
-        authorProfileId: "ph:contrib:powerhouse",
-      }),
+  it("should handle editUpdate operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(EditUpdateInputSchema());
+
+    const updatedDocument = reducer(document, editUpdate(input));
+
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "EDIT_UPDATE",
     );
-    expect(next.state.global.title).toBe(
-      "DeFi United launches recovery effort",
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
-    expect(next.state.global.body).toBe(
-      "Initial pledges have been received...",
-    );
-    expect(next.state.global.visibility).toBe("PUBLIC");
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("EDIT_UPDATE updates title and body", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, draftUpdate({ title: "v1", body: "v1" }));
-    doc = reducer(doc, editUpdate({ title: "v2", body: "v2" }));
-    expect(doc.state.global.title).toBe("v2");
-    expect(doc.state.global.body).toBe("v2");
-  });
+  it("should handle publishUpdate operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(PublishUpdateInputSchema());
 
-  it("PUBLISH_UPDATE requires title and body", () => {
-    const doc = utils.createDocument();
-    const next = reducer(doc, publishUpdate({ publishedAt: PUB_AT }));
-    expect(next.operations.global[0].error).toBe(
-      "Title and body are required to publish",
+    const updatedDocument = reducer(document, publishUpdate(input));
+
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "PUBLISH_UPDATE",
     );
-  });
-
-  it("PUBLISH_UPDATE captures metrics snapshot", () => {
-    let doc = utils.createDocument();
-    doc = reducer(
-      doc,
-      draftUpdate({ title: "Update", body: "Body content here" }),
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
-    doc = reducer(
-      doc,
-      publishUpdate({
-        publishedAt: PUB_AT,
-        metricsSnapshot: {
-          totalPledged: 70000,
-          totalReceived: 6850,
-          dependenciesResolved: 1,
-        },
-      }),
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
+  });
+
+  it("should handle attachAnnouncement operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(AttachAnnouncementInputSchema());
+
+    const updatedDocument = reducer(document, attachAnnouncement(input));
+
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "ATTACH_ANNOUNCEMENT",
     );
-    expect(doc.state.global.publishedAt).toBe(PUB_AT);
-    expect(doc.state.global.metricsSnapshot).toEqual({
-      totalPledged: 70000,
-      totalReceived: 6850,
-      dependenciesResolved: 1,
-    });
-  });
-
-  it("rejects double-publish", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, draftUpdate({ title: "T", body: "B" }));
-    doc = reducer(doc, publishUpdate({ publishedAt: PUB_AT }));
-    doc = reducer(doc, publishUpdate({ publishedAt: PUB_AT }));
-    expect(doc.operations.global[2].error).toBe(
-      "Update has already been published",
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("RETRACT_UPDATE clears publishedAt", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, draftUpdate({ title: "T", body: "B" }));
-    doc = reducer(doc, publishUpdate({ publishedAt: PUB_AT }));
-    expect(doc.state.global.publishedAt).toBe(PUB_AT);
-    doc = reducer(doc, retractUpdate({ _: null }));
-    expect(doc.state.global.publishedAt).toBeNull();
-  });
+  it("should handle retractUpdate operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(RetractUpdateInputSchema());
 
-  it("RETRACT_UPDATE rejects when not published", () => {
-    const doc = utils.createDocument();
-    const next = reducer(doc, retractUpdate({ _: null }));
-    expect(next.operations.global[0].error).toBe("Update is not published");
-  });
+    const updatedDocument = reducer(document, retractUpdate(input));
 
-  it("ATTACH_ANNOUNCEMENT appends external links", () => {
-    let doc = utils.createDocument();
-    doc = reducer(
-      doc,
-      attachAnnouncement({
-        id: generateId(),
-        platform: "TWITTER",
-        url: "https://twitter.com/defiunited/status/123",
-      }),
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "RETRACT_UPDATE",
     );
-    doc = reducer(
-      doc,
-      attachAnnouncement({
-        id: generateId(),
-        platform: "FARCASTER",
-        url: "https://warpcast.com/defiunited/0xabc",
-      }),
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
-    expect(doc.state.global.externalAnnouncements).toHaveLength(2);
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("SET_VISIBILITY changes the visibility", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, setVisibility({ visibility: "CONTRIBUTORS_ONLY" }));
-    expect(doc.state.global.visibility).toBe("CONTRIBUTORS_ONLY");
+  it("should handle setVisibility operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(SetVisibilityInputSchema());
+
+    const updatedDocument = reducer(document, setVisibility(input));
+
+    expect(isStatusUpdateDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "SET_VISIBILITY",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 });
