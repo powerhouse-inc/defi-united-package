@@ -11,11 +11,10 @@ import type { ExternalDependencyPHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the ExternalDependency document type */
-export const ExternalDependency: DocumentModelModule<ExternalDependencyPHState> =
-  {
-    version: 1,
-    reducer,
-    actions,
-    utils,
-    documentModel: createState(defaultBaseState(), documentModel),
-  };
+export const ExternalDependency = {
+  version: 1,
+  reducer,
+  actions,
+  utils,
+  documentModel: createState(defaultBaseState(), documentModel),
+} as const satisfies DocumentModelModule<ExternalDependencyPHState>;

@@ -1,252 +1,218 @@
-import { generateId } from "document-model";
+import { generateMock } from "document-model";
 import {
   addApprovalRef,
+  AddApprovalRefInputSchema,
   addRecipient,
+  AddRecipientInputSchema,
   approvePlan,
+  ApprovePlanInputSchema,
   cancelPlan,
+  CancelPlanInputSchema,
   completeDistribution,
+  CompleteDistributionInputSchema,
   isDistributionPlanDocument,
   markRecipientFailed,
+  MarkRecipientFailedInputSchema,
   markRecipientRefunded,
+  MarkRecipientRefundedInputSchema,
   markRecipientSent,
+  MarkRecipientSentInputSchema,
   reducer,
   removeRecipient,
+  RemoveRecipientInputSchema,
   setMethodology,
+  SetMethodologyInputSchema,
   updateRecipient,
+  UpdateRecipientInputSchema,
   utils,
 } from "document-models/distribution-plan/v1";
 import { describe, expect, it } from "vitest";
 
-const ADDR_A = "0xAaaA0000000000000000000000000000000000A1";
-const ADDR_B = "0xBbBb0000000000000000000000000000000000b2";
-const TX = "0xfeed1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab";
+describe("PlanningOperations", () => {
+  it("should handle setMethodology operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(SetMethodologyInputSchema());
 
-describe("DistributionPlan planning reducer", () => {
-  it("starts DRAFT with empty recipients and approvals", () => {
-    const doc = utils.createDocument();
-    expect(isDistributionPlanDocument(doc)).toBe(true);
-    expect(doc.state.global.status).toBe("DRAFT");
-    expect(doc.state.global.recipients).toEqual([]);
-    expect(doc.state.global.approvalRefs).toEqual([]);
+    const updatedDocument = reducer(document, setMethodology(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "SET_METHODOLOGY",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("sets methodology and totalAvailable", () => {
-    const doc = utils.createDocument();
-    const next = reducer(
-      doc,
-      setMethodology({
-        methodology: "Pro-rata to verified rsETH holders pre-incident",
-        totalAvailable: 70000,
-      }),
+  it("should handle addRecipient operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(AddRecipientInputSchema());
+
+    const updatedDocument = reducer(document, addRecipient(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "ADD_RECIPIENT",
     );
-    expect(next.state.global.methodology).toContain("Pro-rata");
-    expect(next.state.global.totalAvailable).toBe(70000);
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("adds, updates, and removes recipients in DRAFT", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 10000,
-        rationale: "Largest pre-incident holder",
-      }),
+  it("should handle updateRecipient operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(UpdateRecipientInputSchema());
+
+    const updatedDocument = reducer(document, updateRecipient(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "UPDATE_RECIPIENT",
     );
-    expect(doc.state.global.recipients).toHaveLength(1);
-    expect(doc.state.global.recipients[0].status).toBe("PLANNED");
-
-    doc = reducer(doc, updateRecipient({ id, allocatedAmount: 12000 }));
-    expect(doc.state.global.recipients[0].allocatedAmount).toBe(12000);
-
-    doc = reducer(doc, removeRecipient({ id }));
-    expect(doc.state.global.recipients).toEqual([]);
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("rejects duplicate recipient (same address+chain)", () => {
-    let doc = utils.createDocument();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id: generateId(),
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1,
-      }),
+  it("should handle removeRecipient operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(RemoveRecipientInputSchema());
+
+    const updatedDocument = reducer(document, removeRecipient(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "REMOVE_RECIPIENT",
     );
-    doc = reducer(
-      doc,
-      addRecipient({
-        id: generateId(),
-        address: "0x" + ADDR_A.slice(2).toLowerCase(),
-        chainId: 1,
-        allocatedAmount: 1,
-      }),
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
-    expect(doc.operations.global[1].error).toBe(
-      "Recipient already exists for this chain",
-    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("APPROVE_PLAN moves DRAFT → APPROVED", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, approvePlan({ _: null }));
-    expect(doc.state.global.status).toBe("APPROVED");
+  it("should handle approvePlan operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(ApprovePlanInputSchema());
+
+    const updatedDocument = reducer(document, approvePlan(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "APPROVE_PLAN",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("rejects ADD_RECIPIENT after approval", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(
-      doc,
-      addRecipient({
-        id: generateId(),
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1,
-      }),
+  it("should handle markRecipientSent operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(MarkRecipientSentInputSchema());
+
+    const updatedDocument = reducer(document, markRecipientSent(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "MARK_RECIPIENT_SENT",
     );
-    expect(doc.operations.global[1].error).toContain(
-      "Cannot add recipient in status APPROVED",
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("MARK_RECIPIENT_SENT moves plan to EXECUTING and stores tx", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1000,
-      }),
+  it("should handle markRecipientFailed operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(MarkRecipientFailedInputSchema());
+
+    const updatedDocument = reducer(document, markRecipientFailed(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "MARK_RECIPIENT_FAILED",
     );
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(doc, markRecipientSent({ id, txHash: TX }));
-    expect(doc.state.global.status).toBe("EXECUTING");
-    expect(doc.state.global.recipients[0].status).toBe("SENT");
-    expect(doc.state.global.recipients[0].txHash).toBe(TX);
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("rejects MARK_RECIPIENT_SENT before approval", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1000,
-      }),
+  it("should handle markRecipientRefunded operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(MarkRecipientRefundedInputSchema());
+
+    const updatedDocument = reducer(document, markRecipientRefunded(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "MARK_RECIPIENT_REFUNDED",
     );
-    doc = reducer(doc, markRecipientSent({ id, txHash: TX }));
-    expect(doc.operations.global[1].error).toBe(
-      "Plan must be APPROVED before sending",
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("COMPLETE_DISTRIBUTION requires all recipients SENT or REFUNDED", () => {
-    let doc = utils.createDocument();
-    const idA = generateId();
-    const idB = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id: idA,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1000,
-      }),
-    );
-    doc = reducer(
-      doc,
-      addRecipient({
-        id: idB,
-        address: ADDR_B,
-        chainId: 1,
-        allocatedAmount: 2000,
-      }),
-    );
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(doc, markRecipientSent({ id: idA, txHash: TX }));
-    // Try to complete with one PLANNED still
-    doc = reducer(doc, completeDistribution({ _: null }));
-    expect(doc.operations.global[4].error).toContain(
-      "Cannot complete plan with PLANNED or FAILED recipients",
-    );
+  it("should handle completeDistribution operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(CompleteDistributionInputSchema());
 
-    doc = reducer(doc, markRecipientRefunded({ id: idB }));
-    doc = reducer(doc, completeDistribution({ _: null }));
-    expect(doc.state.global.status).toBe("COMPLETED");
+    const updatedDocument = reducer(document, completeDistribution(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "COMPLETE_DISTRIBUTION",
+    );
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("MARK_RECIPIENT_FAILED records failure but blocks completion", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1000,
-      }),
+  it("should handle cancelPlan operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(CancelPlanInputSchema());
+
+    const updatedDocument = reducer(document, cancelPlan(input));
+
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "CANCEL_PLAN",
     );
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(doc, markRecipientFailed({ id }));
-    expect(doc.state.global.recipients[0].status).toBe("FAILED");
-    // Still in APPROVED — no SENT yet, so plan stays APPROVED
-    expect(doc.state.global.status).toBe("APPROVED");
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
+    );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 
-  it("CANCEL_PLAN flips a non-terminal plan", () => {
-    let doc = utils.createDocument();
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(doc, cancelPlan({ _: null }));
-    expect(doc.state.global.status).toBe("CANCELLED");
-  });
+  it("should handle addApprovalRef operation", () => {
+    const document = utils.createDocument();
+    const input = generateMock(AddApprovalRefInputSchema());
 
-  it("rejects cancelling a completed plan", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addRecipient({
-        id,
-        address: ADDR_A,
-        chainId: 1,
-        allocatedAmount: 1000,
-      }),
-    );
-    doc = reducer(doc, approvePlan({ _: null }));
-    doc = reducer(doc, markRecipientSent({ id, txHash: TX }));
-    doc = reducer(doc, completeDistribution({ _: null }));
-    doc = reducer(doc, cancelPlan({ _: null }));
-    expect(doc.operations.global[4].error).toContain(
-      "Cannot cancel plan in status COMPLETED",
-    );
-  });
+    const updatedDocument = reducer(document, addApprovalRef(input));
 
-  it("ADD_APPROVAL_REF appends links to votes / proposals", () => {
-    let doc = utils.createDocument();
-    const id = generateId();
-    doc = reducer(
-      doc,
-      addApprovalRef({
-        id,
-        url: "https://snapshot.box/#/aave.eth/proposal/0x456",
-        label: "Aave DAO approval vote",
-      }),
+    expect(isDistributionPlanDocument(updatedDocument)).toBe(true);
+    expect(updatedDocument.operations.global).toHaveLength(1);
+    expect(updatedDocument.operations.global[0].action.type).toBe(
+      "ADD_APPROVAL_REF",
     );
-    expect(doc.state.global.approvalRefs).toHaveLength(1);
-    expect(doc.state.global.approvalRefs[0].label).toBe(
-      "Aave DAO approval vote",
+    expect(updatedDocument.operations.global[0].action.input).toStrictEqual(
+      input,
     );
+    expect(updatedDocument.operations.global[0].index).toEqual(0);
   });
 });

@@ -1,170 +1,44 @@
 {
-	"name": "defi-united-package",
-	"description": "Operational toolkit for coordinated DeFi relief / crisis response coalitions. First instance: DeFi United (April 2026 rsETH incident).",
-	"category": "DeFi",
-	"publisher": {
-		"name": "Powerhouse",
-		"url": "https://powerhouse.inc"
-	},
-	"documentModels": [
-		{
-			"id": "defi-united/relief-campaign",
-			"name": "ReliefCampaign"
-		},
-		{
-			"id": "defi-united/contributor-profile",
-			"name": "ContributorProfile"
-		},
-		{
-			"id": "defi-united/pledge",
-			"name": "Pledge"
-		},
-		{
-			"id": "defi-united/external-dependency",
-			"name": "ExternalDependency"
-		},
-		{
-			"id": "defi-united/onchain-receipt",
-			"name": "OnchainReceipt"
-		},
-		{
-			"id": "defi-united/distribution-plan",
-			"name": "DistributionPlan"
-		},
-		{
-			"id": "defi-united/status-update",
-			"name": "StatusUpdate"
-		}
-	],
-	"apps": [
-		{
-			"id": "contributor-profile-editor",
-			"name": "Contributor Profile",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "distribution-plan-editor",
-			"name": "Distribution Plan",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "external-dependency-editor",
-			"name": "External Dependency",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "onchain-receipt-editor",
-			"name": "On-chain Receipt",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "pledge-editor",
-			"name": "Pledge",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "relief-campaign-editor",
-			"name": "Relief Campaign",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		},
-		{
-			"id": "status-update-editor",
-			"name": "Status Update",
-			"documentTypes": [
-				"powerhousedao/document-drive"
-			]
-		}
-	],
-	"editors": [
-		{
-			"id": "contributor-profile-editor",
-			"name": "Contributor Profile",
-			"documentTypes": [
-				"defi-united/contributor-profile"
-			]
-		},
-		{
-			"id": "distribution-plan-editor",
-			"name": "Distribution Plan",
-			"documentTypes": [
-				"defi-united/distribution-plan"
-			]
-		},
-		{
-			"id": "external-dependency-editor",
-			"name": "External Dependency",
-			"documentTypes": [
-				"defi-united/external-dependency"
-			]
-		},
-		{
-			"id": "onchain-receipt-editor",
-			"name": "On-chain Receipt",
-			"documentTypes": [
-				"defi-united/onchain-receipt"
-			]
-		},
-		{
-			"id": "pledge-editor",
-			"name": "Pledge",
-			"documentTypes": [
-				"defi-united/pledge"
-			]
-		},
-		{
-			"id": "relief-campaign-editor",
-			"name": "Relief Campaign",
-			"documentTypes": [
-				"defi-united/relief-campaign"
-			]
-		},
-		{
-			"id": "status-update-editor",
-			"name": "Status Update",
-			"documentTypes": [
-				"defi-united/status-update"
-			]
-		}
-	],
-	"processors": [
-		{
-			"id": "campaign-rollup",
-			"name": "campaign-rollup"
-		},
-		{
-			"id": "onchain-receipt-watcher",
-			"name": "onchain-receipt-watcher"
-		},
-		{
-			"id": "pledge-reconciliation",
-			"name": "pledge-reconciliation"
-		}
-	],
-	"subgraphs": [
-		{
-			"id": "defi-united-contributor-registry",
-			"name": "defi-united-contributor-registry"
-		},
-		{
-			"id": "defi-united-operations",
-			"name": "defi-united-operations"
-		},
-		{
-			"id": "defi-united-public-campaign",
-			"name": "defi-united-public-campaign"
-		}
-	],
-	"config": []
+  "name": "defi-united-package",
+  "description": "Operational toolkit for coordinated DeFi relief / crisis response coalitions. First instance: DeFi United (April 2026 rsETH incident).",
+  "category": "DeFi",
+  "publisher": {
+    "name": "Powerhouse",
+    "url": "https://powerhouse.inc"
+  },
+  "documentModels": [
+    {
+      "id": "defi-united/relief-campaign",
+      "name": "ReliefCampaign"
+    },
+    {
+      "id": "defi-united/contributor-profile",
+      "name": "ContributorProfile"
+    },
+    {
+      "id": "defi-united/pledge",
+      "name": "Pledge"
+    },
+    {
+      "id": "defi-united/external-dependency",
+      "name": "ExternalDependency"
+    },
+    {
+      "id": "defi-united/onchain-receipt",
+      "name": "OnchainReceipt"
+    },
+    {
+      "id": "defi-united/distribution-plan",
+      "name": "DistributionPlan"
+    },
+    {
+      "id": "defi-united/status-update",
+      "name": "StatusUpdate"
+    }
+  ],
+  "apps": [],
+  "editors": [],
+  "processors": [],
+  "subgraphs": [],
+  "config": []
 }

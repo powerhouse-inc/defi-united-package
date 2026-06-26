@@ -57,7 +57,7 @@ async function loadDriveBundle(
   // deleted between the time we picked it up and now. Treat as orphan.
   let parents;
   try {
-    parents = await reactorClient.getParents(campaign.header.id);
+    parents = await reactorClient.getIncomingRelationships(campaign.header.id, "drive/child");
   } catch {
     return null;
   }
@@ -313,7 +313,7 @@ export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
   for (const campaign of all.results as ReliefCampaignDocument[]) {
     let parents;
     try {
-      parents = await subgraph.reactorClient.getParents(campaign.header.id);
+      parents = await subgraph.reactorClient.getIncomingRelationships(campaign.header.id, "drive/child");
     } catch {
       // Campaign was deleted between the find() above and now. Skip.
       continue;
@@ -338,7 +338,7 @@ export async function setupDocumentChangeListener(subgraph: BaseSubgraph) {
     // loop survives the crash that would otherwise propagate.
     let parents;
     try {
-      parents = await subgraph.reactorClient.getParents(changedDocId);
+      parents = await subgraph.reactorClient.getIncomingRelationships(changedDocId, "drive/child");
     } catch {
       return;
     }

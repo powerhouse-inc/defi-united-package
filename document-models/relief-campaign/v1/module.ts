@@ -11,10 +11,10 @@ import type { ReliefCampaignPHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the ReliefCampaign document type */
-export const ReliefCampaign: DocumentModelModule<ReliefCampaignPHState> = {
+export const ReliefCampaign = {
   version: 1,
   reducer,
   actions,
   utils,
   documentModel: createState(defaultBaseState(), documentModel),
-};
+} as const satisfies DocumentModelModule<ReliefCampaignPHState>;

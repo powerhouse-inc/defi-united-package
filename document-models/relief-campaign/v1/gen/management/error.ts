@@ -77,15 +77,22 @@ export class OperatorWalletNotFoundError extends Error implements ReducerError {
 
 export const errors = {
   AddContributionAddress: { DuplicateContributionAddressError },
+
   RemoveContributionAddress: { ContributionAddressNotFoundError },
+
   StartCampaign: {
     InvalidStatusTransitionError,
     MissingCampaignSlugError,
     MissingContributionAddressError,
   },
+
   MarkResolved: { InvalidStatusTransitionError },
+
   MarkFailed: { InvalidStatusTransitionError },
+
   ArchiveCampaign: { InvalidStatusTransitionError },
+
   AddOperatorWallet: { DuplicateOperatorWalletError },
+
   RemoveOperatorWallet: { OperatorWalletNotFoundError },
 };

@@ -11,10 +11,10 @@ import type { PledgePHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the Pledge document type */
-export const Pledge: DocumentModelModule<PledgePHState> = {
+export const Pledge = {
   version: 1,
   reducer,
   actions,
   utils,
   documentModel: createState(defaultBaseState(), documentModel),
-};
+} as const satisfies DocumentModelModule<PledgePHState>;

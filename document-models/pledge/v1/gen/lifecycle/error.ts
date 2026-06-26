@@ -44,12 +44,17 @@ export class ReceivedExceedsPledgedError extends Error implements ReducerError {
 
 export const errors = {
   ProposePledge: { PledgeAlreadyProposedError },
+
   MarkGovernancePending: {
     InvalidStatusTransitionError,
     GovernanceRequiredForPendingError,
   },
+
   MarkConfirmed: { InvalidStatusTransitionError },
+
   MarkReceived: { InvalidStatusTransitionError, ReceivedExceedsPledgedError },
+
   CancelPledge: { InvalidStatusTransitionError },
+
   FailPledge: { InvalidStatusTransitionError },
 };

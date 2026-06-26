@@ -11,11 +11,10 @@ import type { ContributorProfilePHState } from "./gen/types.js";
 import { utils } from "./utils.js";
 
 /** Document model module for the ContributorProfile document type */
-export const ContributorProfile: DocumentModelModule<ContributorProfilePHState> =
-  {
-    version: 1,
-    reducer,
-    actions,
-    utils,
-    documentModel: createState(defaultBaseState(), documentModel),
-  };
+export const ContributorProfile = {
+  version: 1,
+  reducer,
+  actions,
+  utils,
+  documentModel: createState(defaultBaseState(), documentModel),
+} as const satisfies DocumentModelModule<ContributorProfilePHState>;

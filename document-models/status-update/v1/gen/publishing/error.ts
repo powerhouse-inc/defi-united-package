@@ -30,5 +30,6 @@ export class UpdateNotPublishedError extends Error implements ReducerError {
 
 export const errors = {
   PublishUpdate: { UpdateAlreadyPublishedError, MissingTitleOrBodyError },
+
   RetractUpdate: { UpdateNotPublishedError },
 };
